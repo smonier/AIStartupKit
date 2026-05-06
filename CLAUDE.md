@@ -268,6 +268,7 @@ The full harness index is at [`.agents/README.md`](.agents/README.md). Quick ref
 | `/jahia-dev-review` | Code review: critical, warnings, suggestions |
 | `/jahia-dev-screenshot` | Visual comparison: reference vs Jahia render |
 | `/jahia-dev-debug` | Debug build/deploy/runtime errors |
+| `/jahia-dev-cypress` | Scaffold Cypress e2e tests for any new component |
 
 ### OSGi development
 
