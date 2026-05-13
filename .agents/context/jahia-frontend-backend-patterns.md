@@ -30,6 +30,55 @@ Need to communicate from front-end to back-end?
 
 ---
 
+## Island Hydration — Server → Client Props
+
+Islands are the **only supported hydration pattern** in JS template sets. `HydrateInBrowser`/`HydrateOnClient` are deprecated.
+
+### Critical rule: never pass `props={props}`
+
+```tsx
+// ❌ WRONG — currentNode (JCR proxy) cannot be serialized by Island
+export default function MyView(props: ServerProps) {
+  return <Island component={MyClient} props={props} />;
+}
+
+// ✅ CORRECT — destructure to a plain serializable object
+export default function MyView({ currentNode, renderContext }: ServerProps) {
+  const title = currentNode.getProperty("jcr:title").getString();
+  const count = currentNode.hasProperty("count")
+    ? Number(currentNode.getProperty("count").getString())
+    : 0;
+
+  return <Island component={MyClient} props={{ title, count }} />;
+}
+```
+
+**Why:** `Island` serializes props to JSON for client hydration. A `JCRNodeWrapper` is a Java proxy — it throws during JSON serialization. Always pass only primitives, plain objects, or arrays to `props`.
+
+### CSS rule: regular CSS for client components
+
+| Component type | CSS approach | Reason |
+|---|---|---|
+| Server (`.server.tsx`) | `component.module.css` ✅ | Scoped class names are safe — rendered once on server |
+| Client (`.client.tsx`) | `component.css` ✅ | Regular CSS — class names must match between server and client |
+| Client (`.client.tsx`) | ~~`component.module.css`~~ ❌ | Vite transforms class names → mismatch breaks hydration |
+
+```tsx
+// ✅ Server component — CSS Modules fine
+import styles from "./HeroSection.module.css";
+export default function HeroSection() {
+  return <Island component={HeroSectionClient} props={{ ... }} />;
+}
+
+// ✅ Client component — regular CSS import only
+import "./HeroSectionClient.css";
+export default function HeroSectionClient({ title }: Props) {
+  return <section className="hero-section"><h1>{title}</h1></section>;
+}
+```
+
+---
+
 ## Pattern 1 — Jahia built-in GraphQL (no Java code required)
 
 **When:** Reading or writing JCR data from a UI extension. Jahia exposes the full JCR tree, forms API, and workspace operations out of the box.
@@ -37,6 +86,29 @@ Need to communicate from front-end to back-end?
 **Endpoint:** `POST /modules/graphql`
 
 **Authentication:** Session cookie (`credentials: 'same-origin'`) + `X-Requested-With: XMLHttpRequest` header. GraphQL respects the user's JCR ACLs — agents see only what they have permission for.
+
+### Required headers — missing any causes "Permission denied"
+
+When calling the GraphQL endpoint directly (curl, scripts, introspection), all of these headers are required:
+
+```bash
+curl -s -X POST http://localhost:8080/modules/graphql \
+  -u root:root \
+  -H 'Origin: http://localhost:8080' \
+  -H 'Referer: http://localhost:8080/jahia/developerTools/graphql-workspace' \
+  -H 'accept: application/json, multipart/mixed' \
+  -H 'content-type: application/json' \
+  -d '{"query":"{ jcr { nodeByPath(path: \"/sites\") { name } } }"}'
+```
+
+| Header | Why required |
+|---|---|
+| `Origin` + `Referer` | CSRF guard checks same-origin — missing either → 403 |
+| `-u root:root` | Basic auth (dev only) or replace with `Cookie: SESSION=...` for production |
+| `accept: application/json, multipart/mixed` | Jahia returns `multipart/mixed` for subscriptions — plain `application/json` causes parse errors on some responses |
+| `content-type: application/json` | Required for POST body to be read as JSON |
+
+> For the **Jahia GraphQL Workspace** UI, the browser sends all these automatically. For scripts and migrations, they must be set explicitly.
 
 ### From a UI extension (React 18, Apollo)
 
