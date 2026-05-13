@@ -77,6 +77,55 @@ export default function HeroSectionClient({ title }: Props) {
 }
 ```
 
+### CSS rule for add-on modules: use `<AddResources>`
+
+A **template set** (`module-type: "templatesSet"`) controls the page `<head>` and can include a `<link>` tag for `dist/assets/style.css` directly in its main template.
+
+An **add-on module** (`module-type: "module"`) does not control the page — its CSS is never automatically injected. Use `<AddResources>` in every server view that needs styling:
+
+```tsx
+import { AddResources, jahiaComponent } from "@jahia/javascript-modules-library";
+
+// Inside the jahiaComponent return:
+return (
+  <>
+    <AddResources
+      type="css"
+      resources="dist/assets/style.css"
+      key="my-module-css"           // ← deduplicates when multiple components appear on one page
+    />
+    <section className={classes.section}>
+      ...
+    </section>
+  </>
+);
+```
+
+`resources` is relative to the module root. Jahia resolves it to `/modules/<module-name>/dist/assets/style.css`.  
+The `key` prop prevents duplicate `<link>` tags when several components from the same module appear on one page.
+
+### Node URL rule: `buildNodeUrl(node)`, never `node.getPath()`
+
+`node.getPath()` returns the raw JCR path (e.g. `/sites/mysite/contents/blog/my-post`). Used as an `href`, Jahia cannot route it and redirects to the homepage.
+
+`buildNodeUrl(node)` builds the correct rendered URL including workspace, locale, and `.html` extension. Use it everywhere:
+
+```tsx
+import { buildNodeUrl } from "@jahia/javascript-modules-library";
+
+// ✅ Server view — current node
+const url = buildNodeUrl(currentNode);
+
+// ✅ Server view — related node (e.g. transforming a list of JCR nodes to Island props)
+const events = nodes.map(node => ({
+  url: buildNodeUrl(node),    // ← correct
+  // url: node.getPath(),     // ← WRONG — redirects to homepage
+  title: node.getProperty("title").getString(),
+}));
+```
+
+`buildNodeUrl` is also available client-side but requires `renderContext` passed explicitly — prefer resolving URLs server-side and passing the string as an Island prop.
+
 ---
 
 ## Pattern 1 — Jahia built-in GraphQL (no Java code required)
