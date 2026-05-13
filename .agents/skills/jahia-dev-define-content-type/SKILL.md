@@ -341,13 +341,67 @@ In the view, use a `switch` on `props["j:linkType"]` (see `jahia-dev-create-view
 | Mixin | Adds |
 |---|---|
 | `jnt:content` | Base type for all user content (always include) |
+| `mix:title` | Adds `jcr:title` (i18n string) — **include on every content type** (see rule below) |
 | `namespacemix:component` | Makes this type available as a droppable component in Page Builder |
-| `mix:title` | Adds a `jcr:title` field |
 | `jmix:mainResource` | Makes the node accessible at its own URL — use only for content that needs **both a listing card AND a full detail page** (e.g. blog posts). Do not add to navigation-only or visual composition types. |
 | `jmix:hiddenType` | Hides a type from the Page Builder component picker (use for structural/container nodes editors should not add manually). Prefer over `jmix:studioOnly` which can cause silent rendering issues. |
 | `jmix:accessControllableContent` | Enables per-component access control in jcontent — add to the base module mixin |
 | `jmix:image` | Constraint: only image nodes |
 | `jmix:link` | Built-in link type |
+
+### `mix:title` rule — apply to every content type
+
+**Always add `mix:title` to all content types extending `jnt:content`, `jmix:editorialContent`, or `jmix:mainResource`.** Never declare a custom `title (string) i18n` or `"jcr:title" (string) i18n` property — `mix:title` already provides `jcr:title`.
+
+Why this matters:
+
+| Benefit | Detail |
+|---|---|
+| Node display name | jContent uses `jcr:title` as the label in the content tree |
+| SEO page title | For `jmix:mainResource` nodes, the main template uses `jcr:title` for the HTML `<title>` tag automatically |
+| Standard label | Jahia provides a built-in "Title" label — no properties file entry needed unless you want a custom label |
+| No duplicate field | A custom `title` field alongside `mix:title` forces editors to fill in two identical fields |
+
+```cnd
+// ✅ CORRECT — mix:title provides jcr:title
+[ns:blogPost] > jnt:content, mix:title, jmix:mainResource, nsmix:component
+ - subtitle (string, textarea) i18n
+
+// ❌ WRONG — duplicate custom title field
+[ns:blogPost] > jnt:content, jmix:mainResource, nsmix:component
+ - title (string) i18n mandatory        // ← redundant; use mix:title instead
+ - subtitle (string, textarea) i18n
+
+// ❌ ALSO WRONG — manually declaring jcr:title
+[ns:section] > jnt:content, nsmix:component
+ - "jcr:title" (string) i18n            // ← mix:title provides this; don't repeat it
+```
+
+In your TypeScript `types.ts`, reference the property as `"jcr:title"?:`:
+
+```ts
+export interface Props {
+  "jcr:title"?: string;   // from mix:title — always optional (even if filled in practice)
+  subtitle?: string;
+}
+```
+
+In a server view, destructure with an alias so the rest of the code uses a clean variable name:
+
+```tsx
+jahiaComponent(..., ({ "jcr:title": title, subtitle }: Props, { currentNode }) => {
+  const displayTitle = title ?? currentNode.getName(); // always have a fallback
+  return <h1>{displayTitle}</h1>;
+});
+```
+
+Override the default "Title" label in `.properties` when the context warrants it:
+
+```properties
+# Default Jahia label is "Title" — override only when more specific is clearer
+ns_blogPost.jcr:title=Article title
+ns_blogPost.jcr:title.ui.tooltip=<b>Article title</b> — shown in listings and as the page title.<br/>Max 120 characters.
+```
 
 ### Constraints
 
@@ -524,6 +578,7 @@ If Jahia rejects the type definition (e.g. breaking change), use the **Installed
 - [ ] `src/components/<Name>/definition.cnd` has NO namespace declarations (they live in `settings/definitions.cnd`)
 - [ ] Namespace matches the module (check `settings/definitions.cnd`)
 - [ ] Extends `jnt:content` and appropriate mixins
+- [ ] Includes `mix:title` in supertypes — **never** declare a custom `title` or `"jcr:title"` property
 - [ ] Uses `namespacemix:component` or `namespacemix:pageComponent` — **never** `jmix:droppableContent` directly
 - [ ] All required properties have the `mandatory` attribute
 - [ ] All user-facing string/text fields have `i18n` (default to always)
