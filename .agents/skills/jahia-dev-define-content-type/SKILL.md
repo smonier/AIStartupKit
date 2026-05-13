@@ -127,14 +127,51 @@ If the module uses a custom area type with `pageComponent` (see `jahia-dev-creat
 
 ---
 
-## Step 1 — Identify the component location
+## Step 1 — Two-tier CND split (enforced convention)
 
-CND files can live in two places:
+Every Jahia JavaScript module uses a strict two-tier CND split:
 
-- **Component-level** (preferred): `src/components/<Category>/<Name>/definition.cnd`
-- **Module-level**: `settings/definitions.cnd` (for mixins and shared base types)
+| File | What goes here |
+|---|---|
+| `settings/definitions.cnd` | Namespace declarations (`<ns = '...'>`), shared mixins only |
+| `src/components/<Name>/definition.cnd` | One component type — nothing else |
 
-For a new standalone component, always create a component-level `definition.cnd`.
+**Rules:**
+
+- `settings/definitions.cnd` MUST contain namespace declarations and global mixins. It must NOT contain component types.
+- `src/components/<Name>/definition.cnd` MUST contain only the component type (`[ns:typeName] > ...` and its properties). It must NOT repeat namespace declarations.
+- `@jahia/vite-plugin` auto-discovers and merges ALL `*.cnd` files from `settings/` and `src/**` at build time — so namespace prefixes defined in `settings/definitions.cnd` are available in every component-level CND without re-declaration.
+
+**Good (correct split):**
+
+```cnd
+// settings/definitions.cnd
+<ns = 'http://www.jahia.org/jahia/module/ns/1.0'>
+<nsmix = 'http://www.jahia.org/jahia/module/ns/mix/1.0'>
+
+[nsmix:component] > jmix:droppableContent, jmix:accessControllableContent mixin
+[nsmix:cta] mixin
+ - ctaLabel (string) i18n
+ - ctaType (string, choicelist[linkTypeInitializer]) = 'none' autocreated
+```
+
+```cnd
+// src/components/Hero/definition.cnd  ← NO namespace declarations here
+[ns:hero] > jnt:content, nsmix:component, nsmix:cta
+ - title (string) i18n mandatory
+ - backgroundImage (weakreference, picker[type='image']) < jmix:image
+```
+
+**Common mistake to avoid:**
+
+```cnd
+// ❌ WRONG — namespace declarations do not belong in a component-level CND
+<ns = 'http://www.jahia.org/jahia/module/ns/1.0'>
+[ns:hero] > jnt:content, nsmix:component
+ - title (string) i18n mandatory
+```
+
+For a new standalone component, always create `src/components/<Name>/definition.cnd` — never add it to `settings/definitions.cnd`.
 
 ---
 
@@ -483,6 +520,8 @@ If Jahia rejects the type definition (e.g. breaking change), use the **Installed
 
 ## Validation checklist
 - [ ] Spec confirmed before writing CND (name, fields, views, usage)
+- [ ] Component type is in `src/components/<Name>/definition.cnd` — NOT in `settings/definitions.cnd`
+- [ ] `src/components/<Name>/definition.cnd` has NO namespace declarations (they live in `settings/definitions.cnd`)
 - [ ] Namespace matches the module (check `settings/definitions.cnd`)
 - [ ] Extends `jnt:content` and appropriate mixins
 - [ ] Uses `namespacemix:component` or `namespacemix:pageComponent` — **never** `jmix:droppableContent` directly
