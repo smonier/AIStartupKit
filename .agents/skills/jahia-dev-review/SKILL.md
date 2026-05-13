@@ -65,7 +65,13 @@ Fix: move server-side logic to the `.server.tsx` wrapper and pass results as ser
 Check: any `jahiaComponent` call with `properties: { "cache.expiration": "0" }`.
 Fix: never set expiration to 0. If truly fresh data is needed, use a small value like `"5"` (5 seconds) to still protect under load.
 
-**C8 — Generic area type used for every Area**
+**C8 — CND two-tier split violation**
+Check (a): `settings/definitions.cnd` contains a component type (`[ns:something] > jnt:content`) — component types must live in `src/components/<Name>/definition.cnd`, not in settings.
+Check (b): a `src/components/<Name>/definition.cnd` contains namespace declarations (`<ns = '...'>`). Component-level CND files must not repeat namespace declarations — those belong exclusively in `settings/definitions.cnd`. `@jahia/vite-plugin` auto-merges all `*.cnd` files at build time so namespace prefixes declared in settings are available everywhere.
+Fix (a): move the type definition to `src/components/<Name>/definition.cnd`.
+Fix (b): delete the namespace declaration lines from the component-level file.
+
+**C9 — Generic area type used for every Area**
 Check: page templates where every `<Area>` uses the same generic area type (e.g. `nodeType="namespace:pageArea"` everywhere). This means editors see ALL `pageComponent` types as droppable options in every area — a hero section will appear as an option in a feature card grid.
 Fix: create **one typed area node per section** in `settings/definitions.cnd`, each with a tight child constraint:
 ```cnd
