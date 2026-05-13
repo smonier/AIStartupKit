@@ -263,48 +263,62 @@ Common targets:
 
 ```jsx
 // src/javascript/MyAction/MyAction.jsx
+import React from 'react';
+import { Language } from '@jahia/moonstone';
 import { useNodeChecks } from '@jahia/data-helper';
 
-export const MyAction = ({ path, language, render: Render, ...rest }) => {
-    const { checksResult } = useNodeChecks({ path }, {
-        showOnNodeTypes: ['jnt:page'],      // redundant with registration but safe
+export const MyAction = ({ path, render: Render, ...otherProps }) => {
+    const { checksResult } = useNodeChecks({ path, Language }, {
+        showOnNodeTypes: ['jnt:page'],
+        hideOnNodeTypes: ['jmix:someExcludedMixin'],
+        hideForPaths: ['^/sites/((?!/).)+/SomeFolder/?$'],  // regex supported
+        requiredPermission: ['myPermission'],                // always an array
+        requireModuleInstalledOnSite: ['my-module'],
     });
 
-    if (!Render || !checksResult) return null;
+    if (Render && checksResult) {
+        return <Render {...otherProps} onClick={handleClick} />;
+    }
 
-    return (
-        <Render
-            {...rest}
-            onClick={() => { /* open dialog, call API, etc. */ }}
-        />
-    );
+    return null;
 };
 ```
 
-`useNodeChecks` returns `checksResult: true` only when all declared conditions pass. When `false`, returning `null` hides the action from the UI.
+`useNodeChecks` returns `checksResult: true` only when all declared conditions pass. When `false`, the action is hidden from the UI.
+
+> ⚠️ **Always include `requireModuleInstalledOnSite`** — without it, the action appears on every Jahia site regardless of whether the module is installed there. This is the primary guard that scopes a UI extension to sites where it is relevant.
+
+The render guard pattern is:
+```jsx
+if (Render && checksResult) {
+    return <Render {...otherProps} onClick={handleClick} />;
+}
+return null;
+```
 
 ### `useNodeChecks` — full options
 
 All options are optional. An action is visible only when all provided conditions pass.
 
 ```jsx
+import { Language } from '@jahia/moonstone';
 import { useNodeChecks } from '@jahia/data-helper';
 
-const { checksResult } = useNodeChecks({ path, language }, {
+const { checksResult } = useNodeChecks({ path, Language }, {
   // Node type filters
   showOnNodeTypes: ['jnt:page', 'jnt:file'],       // show only on these types
-  hideOnNodeTypes: ['jmix:externalLink'],           // hide on these types (whitelist + blacklist can coexist)
+  hideOnNodeTypes: ['jmix:externalLink'],           // hide on these types (both can coexist)
 
-  // Permission checks (checked on the node)
-  requiredPermission: 'jcr:write',                 // single permission name
+  // Permission checks (checked on the node) — always use arrays
+  requiredPermission: ['jcr:write'],               // array of permission names
   requiredSitePermission: 'adminTemplates',         // checked on the site root
 
-  // Module installation check
+  // Module installation check — always include this; scopes the action to sites where the module is installed
   requireModuleInstalledOnSite: ['my-module'],     // array of module keys
 
-  // Path-based filters
+  // Path-based filters (regex strings supported)
   showForPaths: ['/sites/mySite/home'],             // show only under these paths
-  hideForPaths: ['/sites/mySite/drafts'],           // hide under these paths
+  hideForPaths: ['^/sites/((?!/).)+/Drafts/?$'],   // hide under these paths (regex)
 
   // Other
   hideOnExternal: true,                             // hide if the node is an external link
@@ -317,11 +331,15 @@ const { checksResult } = useNodeChecks({ path, language }, {
 Typical pattern for an action that targets pages with write permission:
 
 ```jsx
-const { checksResult } = useNodeChecks({ path }, {
+const { checksResult } = useNodeChecks({ path, Language }, {
   showOnNodeTypes: ['jnt:page'],
-  requiredPermission: 'jcr:write',
+  requiredPermission: ['jcr:write'],
+  requireModuleInstalledOnSite: ['my-module'],   // always include — scopes to sites where the module is active
 });
-if (!checksResult) return null;
+if (Render && checksResult) {
+    return <Render {...otherProps} onClick={handleClick} />;
+}
+return null;
 ```
 
 ---
