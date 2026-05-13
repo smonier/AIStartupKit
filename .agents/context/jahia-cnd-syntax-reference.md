@@ -127,6 +127,22 @@ The order of elements in a property definition is **strictly enforced**:
 - sharedChoicelist (string, choicelist[resourceBundle]) = 'choice1', 'choice2' multiple < 'choice1', 'choice2', 'choice3'
 ```
 
+**`resourceBundle('key')` — default from properties file:**
+
+Use when the default value should vary by locale (e.g. richtext fields with pre-filled copy):
+
+```cnd
+- feedbackMsg (string, richtext) = resourceBundle('label.contactForm_feedbackMsg') autocreated mandatory i18n
+```
+
+Jahia reads the key from `settings/resources/<module>.properties` (or the locale-specific variant) when the node is first created and pre-fills the field. The corresponding properties entry:
+
+```properties
+label.contactForm_feedbackMsg=<i>Dear <b>$name</b></i> <br/> Thank you for reaching out!
+```
+
+> Note: `$name` here is a server-side template placeholder set by Jahia's forms engine — not the i18next `{{name}}` interpolation syntax used in `locales/*.json`.
+
 ---
 
 ## Constraints
