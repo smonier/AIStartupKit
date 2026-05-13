@@ -36,6 +36,44 @@ settings/
 | `ns_typeName.propertyName.choiceValue=Label` | `ailp_gridRow.columns.2=2 columns` | Choicelist option |
 | `ns_typeName.viewName=Label` | `ailp_heroBanner.default=Default View` | View display name |
 
+### `.ui.tooltip` — Mandatory for Every Property
+
+**Every property definition MUST have a `.ui.tooltip` entry.** This is not optional. Tooltips appear as a `?` icon next to each field in jContent Editor — clicking it shows the tooltip content. They are the only in-editor guidance editors have at content-creation time.
+
+**HTML is accepted** — use it for rich descriptions: bold terms, line breaks, constraint explanations, or links to brand guidelines.
+
+```properties
+# ─── Minimal tooltip (acceptable) ─────────────────────────────────────────────
+ns_heroBanner.headline.ui.tooltip=Main title shown prominently across the hero section.
+
+# ─── Rich tooltip with HTML (preferred) ───────────────────────────────────────
+ns_heroBanner.headline.ui.tooltip=<b>Hero headline</b> — the primary H1 shown over the background image.<br/>\
+  Max 80 characters. Use sentence case, no trailing period.
+
+ns_heroBanner.backgroundImage.ui.tooltip=<b>Background image</b> — full-width, min 1920×1080px.<br/>\
+  Use a high-contrast image so the headline text remains readable.<br/>\
+  <i>Formats accepted: JPEG, WebP.</i>
+
+ns_heroBanner.ctaLabel.ui.tooltip=<b>Call-to-action button label</b>.<br/>\
+  Keep under 30 characters. Examples: <i>Book a visit</i>, <i>Learn more</i>.
+
+# ─── Choicelist with tooltip explaining each option ───────────────────────────
+ns_heroBanner.layout.ui.tooltip=<b>Layout variant</b>:<br/>\
+  <b>left</b> — text on the left, image on the right.<br/>\
+  <b>center</b> — text centered, image as full background.<br/>\
+  <b>right</b> — text on the right, image on the left.
+
+# ─── Boolean with tooltip explaining impact ───────────────────────────────────
+ns_article.isFeatured.ui.tooltip=When checked, this article appears in the <b>Featured</b> carousel\
+  on the homepage. Only 3 articles can be featured at a time.
+
+# ─── Link to external documentation ──────────────────────────────────────────
+ns_article.canonicalUrl.ui.tooltip=Override the canonical URL for SEO. Leave blank to use the page URL.\
+  See <a href="https://wiki.example.com/seo-guidelines" target="_blank">SEO guidelines</a>.
+```
+
+> **Validation rule:** every `ns_type.property=Label` line must be followed (in any order) by a `ns_type.property.ui.tooltip=...` line. A missing tooltip is a review blocker.
+
 **Full example:**
 
 ```properties
@@ -45,9 +83,11 @@ ailpmix_component=AI Landing Page Component
 
 # ─── HeroBanner properties ────────────────────────────────────────────────────
 ailp_heroBanner.headline=Headline
-ailp_heroBanner.headline.ui.tooltip=Main hero title displayed prominently
+ailp_heroBanner.headline.ui.tooltip=<b>Hero headline</b> — primary H1 displayed over the background image.<br/>\
+  Max 80 characters. Use sentence case.
 ailp_heroBanner.backgroundImage=Background Image
-ailp_heroBanner.backgroundImage.ui.tooltip=Full-width background image for the hero section
+ailp_heroBanner.backgroundImage.ui.tooltip=<b>Background image</b> — full-width, min 1920×1080px.<br/>\
+  Use a high-contrast image so the headline text remains readable.
 
 # ─── Choicelist values ────────────────────────────────────────────────────────
 ailp_gridRow.columns=Number of Columns
@@ -325,4 +365,5 @@ Labels in registry entries always use the `'module-name:key'` format — the mod
 | OSGi: missing `loadNamespaces` call | UI extension labels render as raw `module:key` strings |
 | OSGi: wrong path (`src/main/resources/` instead of `src/main/resources/resources/`) | Properties file not found; all labels missing |
 | JS template set: putting UI strings in `.properties` instead of `locales/*.json` | Labels work in the editor but `t()` calls return the key at runtime |
-| Missing tooltips (`propertyName.ui.tooltip`) | Editors have no guidance on what fields mean |
+| Missing `.ui.tooltip` for any property | **Review blocker** — editors have zero guidance at content-creation time; no `?` icon appears |
+| Tooltip is plain text when HTML would help | Missed opportunity — `<b>`, `<br/>`, `<a>` are all rendered; use them for constraints and examples |
