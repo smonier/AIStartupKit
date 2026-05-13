@@ -209,6 +209,72 @@ jahiaComponent(
 
 ---
 
+## Keyboard navigation for dropdowns (WCAG 2.1 AA SC 2.1.1)
+
+Dropdown trigger button:
+
+```tsx
+<button
+  aria-haspopup="true"
+  aria-expanded={isOpen}
+  aria-controls={`menu-${item.id}`}
+  onClick={() => setIsOpen(!isOpen)}
+  onKeyDown={(e) => {
+    if (e.key === 'Escape') { setIsOpen(false); triggerRef.current?.focus(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); firstItemRef.current?.focus(); }
+  }}
+>
+  {item.label}
+</button>
+<ul
+  id={`menu-${item.id}`}
+  role="menu"
+  hidden={!isOpen}
+>
+  {items.map((child, i) => (
+    <li role="none" key={child.path}>
+      <a
+        role="menuitem"
+        href={buildNodeUrl(child)}
+        ref={i === 0 ? firstItemRef : undefined}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { setIsOpen(false); triggerRef.current?.focus(); }
+          if (e.key === 'ArrowDown') { e.preventDefault(); /* focus next item */ }
+          if (e.key === 'ArrowUp') { e.preventDefault(); /* focus previous item or trigger */ }
+        }}
+      >
+        {getItemTitle(child)}
+      </a>
+    </li>
+  ))}
+</ul>
+```
+
+Rules:
+- Escape closes the dropdown and returns focus to the trigger
+- Arrow Down opens dropdown and moves focus to first item
+- Arrow Down / Arrow Up navigate between items
+- Tab closes the dropdown (natural tab behaviour)
+- `aria-expanded` on the trigger reflects open/closed state
+- `aria-haspopup="true"` on the trigger announces the dropdown to screen readers
+
+---
+
+## `aria-current` for active navigation item
+
+`aria-current="page"` is the correct attribute for the active nav item (not `aria-selected` or a CSS class alone):
+
+```tsx
+<a
+  href={buildNodeUrl(item)}
+  aria-current={isCurrentPage ? 'page' : undefined}
+>
+  {getItemTitle(item)}
+</a>
+```
+
+---
+
 ## SiteHeader — Hamburger Trigger
 
 ```tsx
@@ -275,3 +341,6 @@ jahiaComponent(
 - [ ] `#main-nav` has `data-expanded="false"` for CSS targeting
 - [ ] Hamburger button in SiteHeader has `data-mobile-nav-toggle`
 - [ ] Content node created and published in JCR after deploy
+- [ ] Dropdown triggers have `aria-haspopup="true"` and `aria-expanded` reflecting open state
+- [ ] Keyboard: Escape closes dropdown and returns focus to trigger; Arrow Down opens and focuses first item
+- [ ] Active nav item uses `aria-current="page"` (not `aria-selected` or CSS class alone)

@@ -674,6 +674,60 @@ yarn build && yarn jahia-deploy
 
 ---
 
+### Accessibility and SEO requirements
+
+Every public-facing view must meet WCAG 2.1 AA. Apply these rules before marking a view complete:
+
+**Heading hierarchy**
+- Page templates render the page `jcr:title` as `<h1>` — components must NEVER use `<h1>`
+- Use `<h2>` for a component's primary heading, `<h3>` for sub-items
+- Accept a `headingLevel?: 'h2' | 'h3' | 'h4'` prop for components that may appear at different nesting depths
+- Never skip heading levels (h1 → h3 is invalid; screen readers and search engines rely on hierarchy)
+
+**Image alt text**
+- Every `<img>` needs an `alt` attribute — no exceptions
+- Informative images: `alt="descriptive text"` (what the image conveys, not "image of...")
+- Decorative images: `alt=""` `aria-hidden="true"` — add a comment `{/* decorative */}`
+- Icon-only buttons: `aria-label` on the `<button>`, `alt=""` on the inner `<img>`
+- NEVER default to `jcr:title` as alt text — it is often a filename. Use a dedicated `imageAlt` CND field.
+
+**Image loading and Core Web Vitals**
+- LCP / hero images (above the fold): `loading="eager"` `fetchpriority="high"`
+- All other images: `loading="lazy"` with explicit `width` and `height` to prevent layout shift (CLS)
+- Always include `width` and `height` on every `<img>` — even approximate values prevent CLS
+
+**Focus indicators**
+- Never write `outline: none` or `outline: 0` in CSS without replacing it with a visible `:focus-visible` style
+- Minimum acceptable focus style: `outline: 2px solid currentColor; outline-offset: 2px;`
+
+**Link and button text**
+- Avoid "click here", "read more" as standalone link text
+- When a card has a repeated "Learn more" link, add `aria-label="Learn more about {title}"` for screen reader context
+- `<a>` navigates to a URL; `<button>` triggers an action — never swap them
+
+**ARIA live regions (Islands only)**
+When a client Island updates content dynamically (results, feedback, loading state), screen readers are not notified without a live region:
+```tsx
+// In the Island's render output
+<div role="status" aria-live="polite" aria-atomic="true" className={classes.srOnly}>
+  {announcement}  {/* e.g. "12 results found" — update this string when content changes */}
+</div>
+```
+```css
+/* CSS: visually hidden but readable by screen readers */
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+```
+
+**Reduced motion**
+Wrap all CSS transitions and animations:
+```css
+@media (prefers-reduced-motion: no-preference) {
+  .card { transition: var(--ns-transition-standard); }
+}
+```
+
+---
+
 ## Validation checklist
 - [ ] `jahiaComponent` registered with correct `nodeType` (matches CND)
 - [ ] `Props` imported from `./types.js`
@@ -691,6 +745,14 @@ yarn build && yarn jahia-deploy
 - [ ] **If client-side**: browser-only libraries use dynamic `import()` inside `useEffect`
 - [ ] `yarn build && yarn jahia-deploy` run after all changes
 - [ ] Component renders without errors in Page Builder
+- [ ] No `<h1>` in component views — page template owns the h1
+- [ ] Every `<img>` has `alt` attribute (descriptive or `alt=""` with `aria-hidden="true"` + comment for decorative)
+- [ ] Every `<img>` has explicit `width` and `height` attributes
+- [ ] LCP/hero image has `loading="eager"` `fetchpriority="high"`; all others have `loading="lazy"`
+- [ ] No `outline: none` without a `:focus-visible` replacement
+- [ ] Interactive Islands have a `role="status"` live region for dynamic content updates
+- [ ] CSS transitions wrapped in `@media (prefers-reduced-motion: no-preference)`
+- [ ] Link text is descriptive; repeated links have `aria-label` with context
 
 ## Troubleshooting
 > https://academy.jahia.com/tutorials-get-started/front-end-developer/making-a-hero-section

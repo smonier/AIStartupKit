@@ -11,6 +11,72 @@ A **page template** defines the full layout of a page. It is registered with `co
 
 > ⚠️ **CMS rule — never hardcode links in templates.** Navigation links, logo hrefs, footer links — all must come from contributed content (via props, `buildNodeUrl`, or `j:linkType`). Do not put literal URLs in template code.
 
+## Layout / page shell requirements
+
+### Skip link — mandatory (WCAG 2.1 AA SC 2.4.1)
+
+The skip link must be the **first focusable element** in the page:
+
+```tsx
+// In the page layout template
+<body>
+  <a href="#main-content" className={classes.skipLink}>
+    {t("a11y.skipToContent")}
+  </a>
+  <Header />
+  <main id="main-content">
+    {/* page content */}
+  </main>
+  <Footer />
+</body>
+```
+
+```css
+/* Visually hidden, visible on focus */
+.skipLink {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.skipLink:focus {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: auto;
+  height: auto;
+  padding: 0.5rem 1rem;
+  background: #000;
+  color: #fff;
+  z-index: 9999;
+  text-decoration: none;
+}
+```
+
+Add the i18n key to `locales/en.json`: `"a11y.skipToContent": "Skip to main content"`
+
+### Heading level map
+
+```
+Page template:   <h1>{jcr:title}</h1>   ← ONLY h1 on the page
+Content section: <h2>{section title}</h2>
+Component sub:   <h3>{sub-item title}</h3>
+```
+
+Rule: the page template owns the `<h1>`. **Components must never render `<h1>`.**
+
+### `lang` attribute — mandatory (WCAG 2.1 AA SC 3.1.1)
+
+The `<html>` element must have `lang` set from the current locale:
+
+```tsx
+<html lang={currentResource.getLocale().getLanguage()}>
+```
+
+---
+
 ## Step 1 — Create the template file
 
 Page templates live in `src/templates/Page/`. Name the file `<templateName>.server.tsx`.
@@ -275,6 +341,10 @@ After deploying, the new template will appear in the **template selection** step
 - [ ] `AbsoluteArea` uses `renderContext.getSite()` as parent
 - [ ] Structural container nodes use `jmix:hiddenType` (hidden from picker)
 - [ ] Decision made: page template vs sectioning component (see Step 4)
+- [ ] `<a href="#main-content">Skip to main content</a>` is first focusable element in `<body>`
+- [ ] `<main id="main-content">` wraps page content
+- [ ] `<html lang={locale}>` is set from `currentResource.getLocale().getLanguage()`
+- [ ] Page template renders page `jcr:title` in `<h1>` — components never use `<h1>`
 - [ ] `yarn build && yarn jahia-deploy` run and template appears in Jahia UI
 
 ## Troubleshooting

@@ -77,9 +77,51 @@ The `ctaLabel`, `ctaType`, `j:linknode`, `j:url` fields are inherited and ready 
 |---|---|---|
 | `nsmix:cta` | `ctaLabel`, `ctaType` (+ injected `j:linknode`/`j:url`) | Any type with a button or link |
 | `nsmix:badge` | `badgeText`, `badgeColor` | Cards, teasers, any labelled content |
-| `nsmix:seo` | `metaTitle`, `metaDescription`, `seoKeywords` | Any `jmix:mainResource` type |
+| `nsmix:seo` | `metaTitle`, `metaDescription`, `canonicalUrl`, `ogImage`, `ogType` | Every `jmix:mainResource` type (mandatory — see rule below) |
 | `nsmix:media` | `image` (weakreference), `imageAltText`, `imageCaption` | Any type with a visual asset |
 | `nsmix:trackable` | `analyticsId`, `trackingLabel` | Any CTA or interactive element |
+
+#### `nsmix:seo` — full CND definition
+
+```cnd
+// settings/definitions.cnd — declare once, extend on every jmix:mainResource type
+[nsmix:seo] mixin
+ - metaTitle (string) i18n
+ - metaDescription (string, textarea) i18n
+ - canonicalUrl (string) indexed=no
+ - ogImage (weakreference, picker[type='image']) < jmix:image
+ - ogType (string, choicelist[resourceBundle]) = 'website' autocreated < 'website', 'article', 'event', 'product'
+```
+
+Corresponding `.properties` labels:
+
+```properties
+nsmix_seo=SEO & Social
+ns_myType.metaTitle=SEO title
+ns_myType.metaTitle.ui.tooltip=<b>SEO title</b> — overrides the page title in search results.<br/>Leave blank to use the page title. Max <b>60 characters</b>.
+ns_myType.metaDescription=Meta description
+ns_myType.metaDescription.ui.tooltip=<b>Meta description</b> — shown under the title in search results.<br/>Max <b>160 characters</b>. Plain text only.
+ns_myType.canonicalUrl=Canonical URL
+ns_myType.canonicalUrl.ui.tooltip=<b>Override canonical URL</b> — use only if this content is syndicated or if a vanity URL should be the canonical. Leave blank in all other cases.
+ns_myType.ogImage=Social sharing image
+ns_myType.ogImage.ui.tooltip=<b>Open Graph image</b> — displayed when this page is shared on social media.<br/>Recommended size: <b>1200×630 px</b> (16:9). Falls back to the featured image if blank.
+ns_myType.ogType=Content type
+ns_myType.ogType.ui.tooltip=Schema.org content type for social cards. <b>article</b> for news/blog, <b>event</b> for events, <b>product</b> for e-commerce, <b>website</b> for everything else.
+```
+
+TypeScript interface:
+
+```ts
+export interface SeoProps {
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
+  ogImage?: JCRNodeWrapper;
+  ogType?: 'website' | 'article' | 'event' | 'product';
+}
+```
+
+> ⛔ **Every type extending `jmix:mainResource` MUST include `nsmix:seo` in its supertypes.** Without it, editors cannot control the page's appearance in search results and social previews. The `jahia-dev-review` skill enforces this as check W11.
 
 **Generic container — accept any droppable child:**
 
@@ -403,6 +445,21 @@ ns_blogPost.jcr:title=Article title
 ns_blogPost.jcr:title.ui.tooltip=<b>Article title</b> — shown in listings and as the page title.<br/>Max 120 characters.
 ```
 
+### Image field — always pair with a dedicated alt field
+
+Always pair an image field with a dedicated `imageAlt (string) i18n` field. NEVER use `jcr:title` as a default alt text — it is often a filename or technical string. In views, use `imageAlt ?? ""` with a code comment `/* decorative if no alt provided */`. For informative images where alt is mandatory, declare `imageAlt (string) mandatory i18n`.
+
+```cnd
+[ns:card] > jnt:content, nsmix:component
+ - thumbnail (weakreference, picker[type='image']) < jmix:image
+ - imageAlt (string) i18n   // ← always paired with the image field
+```
+
+```tsx
+// In the view:
+<img src={buildNodeUrl(thumbnail)} alt={imageAlt ?? ""} /* decorative if no alt provided */ />
+```
+
 ### Constraints
 
 - `< jmix:image` — restricts a weakreference to image nodes only
@@ -584,6 +641,8 @@ If Jahia rejects the type definition (e.g. breaking change), use the **Installed
 - [ ] All user-facing string/text fields have `i18n` (default to always)
 - [ ] Structural/container types have `jmix:hiddenType` (not shown in picker) — do NOT use `jmix:studioOnly`
 - [ ] `jmix:mainResource` only used for listing + detail content (not visual composition)
+- [ ] Every `jmix:mainResource` type includes `nsmix:seo` in its supertypes (check W11)
+- [ ] Image fields have a paired `imageAlt (string) i18n` field — never use `jcr:title` as alt text
 - [ ] `types.ts` created with correct TypeScript types
 - [ ] Views handle null/missing values gracefully (mandatory does not guarantee a value)
 - [ ] Translation keys added to `.properties` files (EN + FR minimum)

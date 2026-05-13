@@ -134,6 +134,28 @@ Define brand tokens in `design-system/src/variables.css`, not in component CSS M
 }
 ```
 
+> ⚠️ The example color `--luxe-color-primary: #c29b40` (gold) has a contrast ratio of ~2.3:1 against white — this FAILS WCAG AA for text. Always verify brand colors with the [WebAIM Contrast Checker](https://webaim.org/resources/contrastchecker/) before using them for text or interactive element borders.
+
+#### Reduced-motion: always wrap transitions
+
+```css
+/* Default: no motion — transitions are 0ms */
+:root {
+  --ns-transition-standard: 0ms;
+  --ns-transition-fast: 0ms;
+}
+
+/* Only animate when the user has not requested reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  :root {
+    --ns-transition-standard: 0.2s ease;
+    --ns-transition-fast: 0.1s ease;
+  }
+}
+```
+
+This pattern ensures transitions are off by default and only enabled for users who have not opted into reduced motion — the safest approach for accessibility.
+
 Export shared grid breakpoints and spacing as `@value` so CSS Modules can import them:
 
 ```css
@@ -273,62 +295,51 @@ jahiaComponent(
 
 ## Responsive images — `imageNodeToImgProps`
 
-A reusable utility pattern for generating responsive `<img>` props from a Jahia image node. Build this in `src/commons/libs/imageNodeToImgProps/`:
+A reusable utility pattern for generating `<img>` props from a Jahia image node. Build this in `src/commons/libs/imageNodeToImgProps/`.
 
-```ts
-// src/commons/libs/imageNodeToImgProps/index.ts
-import type { JCRNodeWrapper } from "org.jahia.services.content";
-import { buildNodeUrl } from "@jahia/javascript-modules-library";
-
-interface ImgProps {
-  src: string;
-  alt: string;
-  srcSet?: string;
-  width?: number;
-  height?: number;
-}
-
-export function imageNodeToImgProps(
-  node: JCRNodeWrapper,
-  widths: number[],   // desired widths for srcSet, e.g. [400, 800, 1200]
-): ImgProps {
-  const isVector = node.getName().endsWith(".svg");
-  const src = buildNodeUrl(node);
-
-  if (isVector) return { src, alt: node.getPropertyAsString("jcr:title") || "" };
-
-  const intrinsicWidth = node.hasProperty("j:width")
-    ? parseInt(node.getPropertyAsString("j:width"), 10)
-    : Infinity;
-
-  const clampedWidths = widths
-    .filter(w => w <= intrinsicWidth)
-    .concat(intrinsicWidth === Infinity ? [] : [intrinsicWidth]);
-
-  const srcSet = [...new Set(clampedWidths)]
-    .map(w => `${src}?w=${w} ${w}w`)
-    .join(", ");
-
-  return {
-    src,
-    alt: node.getPropertyAsString("jcr:title") || "",
-    srcSet: srcSet || undefined,
-    width: intrinsicWidth === Infinity ? undefined : intrinsicWidth,
-    height: node.hasProperty("j:height")
-      ? parseInt(node.getPropertyAsString("j:height"), 10)
-      : undefined,
-  };
-}
-```
-
-Usage:
+Key rules:
+- Use a **dedicated `imageAlt` CND field** for alt text. NEVER pass `jcr:title` directly — it is often a filename or technical string.
+- Pass `isLCP: true` for above-the-fold hero images to set `loading="eager"` and `fetchPriority="high"`.
+- Always include `width` and `height` to prevent layout shift (CLS).
 
 ```tsx
-const imgProps = imageNodeToImgProps(coverImage, [400, 800, 1200]);
-<img {...imgProps} sizes="(max-width: 768px) 100vw, 800px" loading="lazy" />
+/**
+ * Build <img> props from a JCR image node (jmix:image).
+ * @param node - the image JCRNodeWrapper
+ * @param options.alt - explicit alt text from a dedicated CND field (e.g. imageAlt). NEVER pass jcr:title directly.
+ * @param options.isLCP - true for above-the-fold hero images (sets loading="eager" fetchpriority="high")
+ */
+function imageNodeToImgProps(
+  node: JCRNodeWrapper,
+  options: { alt: string; isLCP?: boolean }
+): React.ImgHTMLAttributes<HTMLImageElement> {
+  const width = node.hasProperty("j:width") ? Number(node.getProperty("j:width").getString()) : undefined;
+  const height = node.hasProperty("j:height") ? Number(node.getProperty("j:height").getString()) : undefined;
+  return {
+    src: buildNodeUrl(node),
+    alt: options.alt,                          // empty string "" for decorative images
+    width,
+    height,
+    loading: options.isLCP ? "eager" : "lazy",
+    fetchPriority: options.isLCP ? "high" : undefined,
+  };
+}
+
+// Usage — hero image (LCP candidate):
+const imgProps = imageNodeToImgProps(featuredImage as JCRNodeWrapper, {
+  alt: imageAlt ?? "",   // imageAlt is a dedicated CND field, not jcr:title
+  isLCP: true,
+});
+<img {...imgProps} className={classes.hero} />
+
+// Usage — card thumbnail:
+const thumbProps = imageNodeToImgProps(thumbnail as JCRNodeWrapper, {
+  alt: imageAlt ?? "", // alt="" marks it as decorative when no alt text provided
+});
+<img {...thumbProps} className={classes.thumb} />  {/* decorative */}
 ```
 
-> `sizes` is always provided at the call site — it depends on the layout context, not the image node.
+> `sizes` and `srcSet` are provided at the call site when needed — they depend on the layout context, not the image node.
 
 ---
 
@@ -409,19 +420,88 @@ function renderCTA(props: CTAProps) {
 
 ## SEO meta tags pattern
 
-Extract SEO properties from the main node and inject them into `<head>`:
+Full `SeoMetaTags` component — emit in the page template `<head>`. Requires `nsmix:seo` mixin on the main resource node. Covers `<title>`, meta description, canonical, Open Graph, Twitter Card, and hreflang:
 
 ```tsx
-import { useServerContext, getNodeProps } from "@jahia/javascript-modules-library";
+import { buildNodeUrl, server, jahiaComponent } from "@jahia/javascript-modules-library";
+import type { JCRNodeWrapper } from "org.jahia.services.content";
 
-function SeoMetaTags() {
-  const { mainNode } = useServerContext();
-  const { "jcr:title": title, "jcr:description": description } = getNodeProps(mainNode);
+/**
+ * SeoMetaTags — emit in the page template <head>.
+ * Requires: nsmix:seo mixin on the main resource node.
+ * Covers: <title>, meta description, canonical, Open Graph, Twitter Card, hreflang.
+ */
+function SeoMetaTags({
+  mainNode,
+  renderContext,
+  currentResource,
+}: {
+  mainNode: JCRNodeWrapper;
+  renderContext: any;
+  currentResource: any;
+}) {
+  const locale = currentResource.getLocale().getLanguage();
+  const siteKey = renderContext.getSite().getSiteKey();
+
+  // Title — nsmix:seo metaTitle overrides jcr:title
+  const metaTitle = mainNode.hasProperty("metaTitle")
+    ? mainNode.getProperty("metaTitle").getString()
+    : mainNode.hasProperty("jcr:title")
+    ? mainNode.getProperty("jcr:title").getString()
+    : mainNode.getName();
+
+  const metaDescription = mainNode.hasProperty("metaDescription")
+    ? mainNode.getProperty("metaDescription").getString()
+    : null;
+
+  // Canonical — nsmix:seo canonicalUrl overrides default
+  const canonicalUrl = mainNode.hasProperty("canonicalUrl")
+    ? mainNode.getProperty("canonicalUrl").getString()
+    : buildNodeUrl(mainNode);
+
+  // OG image
+  const ogImageUrl = mainNode.hasProperty("ogImage")
+    ? buildNodeUrl(mainNode.getProperty("ogImage").getNode() as JCRNodeWrapper)
+    : null;
+
+  const ogType = mainNode.hasProperty("ogType")
+    ? mainNode.getProperty("ogType").getString()
+    : "website";
+
+  // hreflang — iterate all site locales
+  const siteLocales: string[] = server.render.getSiteLocales?.(renderContext) ?? [locale];
+  const hreflangLinks = siteLocales.map((loc) => ({
+    loc,
+    url: buildNodeUrl(mainNode, { language: loc }),
+  }));
+  const defaultLocale = siteLocales[0];
 
   return (
     <>
-      {title && <title>{String(title)}</title>}
-      {description && <meta name="description" content={String(description)} />}
+      <title>{metaTitle}</title>
+      {metaDescription && <meta name="description" content={metaDescription} />}
+      <link rel="canonical" href={canonicalUrl} />
+
+      {/* Open Graph */}
+      <meta property="og:title" content={metaTitle} />
+      {metaDescription && <meta property="og:description" content={metaDescription} />}
+      <meta property="og:url" content={canonicalUrl} />
+      <meta property="og:type" content={ogType} />
+      {ogImageUrl && <meta property="og:image" content={ogImageUrl} />}
+      {ogImageUrl && <meta property="og:image:width" content="1200" />}
+      {ogImageUrl && <meta property="og:image:height" content="630" />}
+
+      {/* Twitter Card */}
+      <meta name="twitter:card" content={ogImageUrl ? "summary_large_image" : "summary"} />
+      <meta name="twitter:title" content={metaTitle} />
+      {metaDescription && <meta name="twitter:description" content={metaDescription} />}
+      {ogImageUrl && <meta name="twitter:image" content={ogImageUrl} />}
+
+      {/* hreflang — multilingual */}
+      {hreflangLinks.map(({ loc, url }) => (
+        <link key={loc} rel="alternate" hrefLang={loc} href={url} />
+      ))}
+      <link rel="alternate" hrefLang="x-default" href={buildNodeUrl(mainNode, { language: defaultLocale })} />
     </>
   );
 }
