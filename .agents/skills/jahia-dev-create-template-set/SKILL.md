@@ -63,6 +63,15 @@ The CLI prompts three questions:
 
 1. `cd <project-name>`
 2. `yarn install` — install dependencies
+3. Verify `src/types.d.ts` exists with `/// <reference types="vite/client" />`. If it is absent, create it — without this file `tsc` cannot resolve `*.module.css` imports even when the files exist on disk:
+
+```bash
+# Check
+cat src/types.d.ts
+
+# Create if missing
+echo '/// <reference types="vite/client" />' > src/types.d.ts
+```
 
 To run the module locally, use the `/jahia-dev-start-local` skill next.
 
@@ -86,7 +95,8 @@ Summarize its contents for the user — key commands, how to start Jahia, how to
 <module-name>/
 ├── src/
 │   ├── components/        # React content type components
-│   └── templates/         # Page layouts and CSS
+│   ├── templates/         # Page layouts and CSS
+│   └── types.d.ts         # ← MUST exist: /// <reference types="vite/client" />
 ├── settings/
 │   ├── definitions.cnd    # Content type definitions
 │   ├── locales/           # i18n (en.json, fr.json)
@@ -117,4 +127,5 @@ If anything goes wrong during setup or scaffolding, refer to the official Jahia 
 - [ ] `yarn --version` reports 4+
 - [ ] Module directory created with expected structure
 - [ ] `yarn install` completes without errors
+- [ ] `src/types.d.ts` exists with `/// <reference types="vite/client" />` (required for CSS Module type resolution in tsc)
 - [ ] README.md summarized for the user
