@@ -58,6 +58,50 @@ ailp_gridRow.columns.4=4 columns
 
 # ─── Views ────────────────────────────────────────────────────────────────────
 ailp_heroBanner.default=Default View
+
+# ─── Default value pulled from resourceBundle ─────────────────────────────────
+label.contactForm_feedbackMsg=<i>Dear <b>$name</b></i> <br/> Thank you for reaching out!
+```
+
+### `resourceBundle('key')` — Default Values from Properties
+
+A CND property default can reference a properties key instead of a hardcoded string. Useful for richtext fields whose default content varies by locale.
+
+```cnd
+// CND
+[ns:contactForm] > jnt:content, ns:componentMixin
+ - feedbackMsg (string, richtext) = resourceBundle('label.contactForm_feedbackMsg') autocreated mandatory i18n
+```
+
+```properties
+# ns-module.properties (EN)
+label.contactForm_feedbackMsg=<i>Dear <b>$name</b></i> <br/> Thank you for reaching out!
+
+# ns-module_fr.properties (FR)
+label.contactForm_feedbackMsg=<i>Cher <b>$name</b></i> <br/> Merci de nous avoir contactés !
+```
+
+When Jahia creates the node, it reads the properties file for the editor's current locale and pre-fills the field. The `$name` syntax is a server-side placeholder (not i18next `{{name}}`).
+
+### `choicelist[subnodetypes, resourceBundle]` — Combined Selector
+
+When a choicelist is backed by JCR node types AND needs translated labels, combine both selectors:
+
+```cnd
+- type (string, choicelist[subnodetypes='jnt:page,ns:queryContent',resourceBundle]) mandatory
+- criteria (string, choicelist[resourceBundle]) = 'jcr:created' autocreated < 'jcr:created','jcr:lastModified'
+- sortDirection (string, choicelist[resourceBundle]) = 'asc' autocreated < 'asc','desc'
+```
+
+The `resourceBundle` selector then resolves labels from `.properties` for each value:
+
+```properties
+ns_queryContent.criteria=Sort by
+ns_queryContent.criteria.jcr:created=Creation date
+ns_queryContent.criteria.jcr:lastModified=Last modified
+ns_queryContent.sortDirection=Direction
+ns_queryContent.sortDirection.asc=Ascending
+ns_queryContent.sortDirection.desc=Descending
 ```
 
 ---
@@ -76,32 +120,41 @@ settings/
 
 **No manual registration is needed.** The `@jahia/vite-plugin` in `vite.config.js` picks up all files in `settings/locales/` automatically.
 
-**Key structure — nested JSON:**
+**Key structure — two equivalent formats:**
+
+i18next accepts both **flat dot-notation** and **nested JSON**. Pick one style per project and stick to it.
 
 ```json
+// ✅ Flat (used in the luxe-jahia-demo reference implementation)
 {
-    "section": {
-        "contact": {
-            "address": "address",
-            "phone": "phone",
-            "btn": "make an appointment"
-        }
-    },
-    "alt": {
-        "estate": "view of the real estate: {{estate}}"
-    },
-    "pagination": {
-        "previous": "Previous",
-        "next": "Next",
-        "showing": "Showing {{from}} to {{to}} of {{total}} results"
-    },
-    "form": {
-        "contact": {
-            "submit": "submit",
-            "sendMessageError": "Something went wrong. Status: {{status}}."
-        }
-    }
+  "section.heading.contact": "contact",
+  "section.contact.address": "address",
+  "section.contact.btn": "make an appointment",
+  "alt.estate": "view of the real estate: {{estate}}",
+  "pagination.showing": "Showing {{from}} to {{to}} of {{total}} results",
+  "form.contact.sendMessageError": "Something went wrong. Status: {{status}}.",
+  "footer.copyright": "© 2002-{{currentDate}} All Rights Reserved"
 }
+
+// ✅ Nested (equivalent — t("section.contact.btn") works identically)
+{
+  "section": {
+    "heading": { "contact": "contact" },
+    "contact": {
+      "address": "address",
+      "btn": "make an appointment"
+    }
+  }
+}
+```
+
+**Interpolation syntax** — always `{{variableName}}` (double braces):
+
+```tsx
+t("alt.estate", { estate: title })                         // → "view of the real estate: Villa Riviera"
+t("pagination.showing", { from: 1, to: 10, total: 42 })   // → "Showing 1 to 10 of 42 results"
+t("footer.copyright", { currentDate: new Date().getFullYear() })
+t("form.contact.sendMessageError", { name, status })
 ```
 
 **Usage in views** (`useTranslation` from `react-i18next`):
@@ -118,11 +171,87 @@ const { t } = useTranslation();
 // With interpolation
 <img alt={t("alt.estate", { estate: title })} />
 
-// In server view alongside JCR data
+// In server view alongside JCR data — two separate concerns
+const locale = currentResource.getLocale().getLanguage(); // for Number/Date formatting
+<p>{price.toLocaleString(locale)}€</p>       // JS locale formatting
+<span>{t("estate.bedrooms.label")}</span>    // UI label from locales/en.json
+```
+
+### HTML Translations
+
+When a translated string contains HTML markup (links, bold, line breaks), use `dangerouslySetInnerHTML` — **never** render raw `t()` output as JSX:
+
+```tsx
+// ✅ HTML translation — the value in en.json contains <br/>, <b>, <i> tags
+<p dangerouslySetInnerHTML={{
+  __html: t("form.contact.sendMessageError", { name, status }),
+}} />
+
+// ❌ Wrong — JSX escapes HTML entities, tags appear as literal text
+<p>{t("form.contact.sendMessageError", { name, status })}</p>
+```
+
+Mark HTML translation keys with a comment in the JSON so future editors know not to strip the markup:
+
+```json
+{
+  "form.contact.sendMessageError": "Oops! Sorry, <b>{{name}}</b>.<br/> Status: {{status}}."
+}
+```
+
+### `TFunction` Type — For Utility Functions Outside Components
+
+When a non-component helper needs to format translated strings, accept `t` as a parameter typed with `TFunction`:
+
+```tsx
+import type { TFunction } from "i18next";
+
+// Utility outside a component
+function buildEstateRows(estate: EstateProps, t: TFunction) {
+  return [
+    { label: t("estate.type.label"),     value: t(`estate.type.${estate.type}`) },
+    { label: t("estate.surface.label"),  value: `${estate.surface} m²` },
+    { label: t("estate.bedrooms.label"), value: estate.bedrooms },
+  ];
+}
+
+// In the component
 const { t } = useTranslation();
+const rows = buildEstateRows(estate, t);
+```
+
+### Locale in Islands — No Prop Needed
+
+`useTranslation()` inside a client component (`.client.tsx`) **automatically** picks up the correct locale. The `@jahia/javascript-modules-library` initializes i18next with the current page language before hydration — you do not need to pass `locale` or `language` as a prop to Islands for translation purposes.
+
+```tsx
+// ✅ Server — pass only data props, never a "locale" prop for translations
+return (
+  <Island
+    component={SearchEstateFormClient}
+    props={{ params, onChange }}   // locale-for-t() is automatic
+  />
+);
+
+// ✅ Client — useTranslation() works without receiving locale as a prop
+export default function SearchEstateFormClient({ params, onChange }) {
+  const { t } = useTranslation();  // correct locale injected by i18next context
+  return <button>{t("form.estate.submit")}</button>;
+}
+```
+
+The only case where you pass locale as a prop is for **JS `Intl`/`toLocaleString` formatting** (numbers, dates), not for translations:
+
+```tsx
+// Server
 const locale = currentResource.getLocale().getLanguage();
-<p>{price.toLocaleString(locale)}€</p>  // locale from JCR
-<span>{t("estate.bedrooms.label")}</span>  // UI label from locales
+<Island component={PriceClient} props={{ price, locale }} />
+
+// Client
+export default function PriceClient({ price, locale }: { price: number; locale: string }) {
+  const { t } = useTranslation();                          // translations — automatic
+  return <span>{price.toLocaleString(locale)}€</span>;     // formatting — needs locale prop
+}
 ```
 
 ---
