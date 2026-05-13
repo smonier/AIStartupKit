@@ -65,13 +65,21 @@ Fix: move server-side logic to the `.server.tsx` wrapper and pass results as ser
 Check: any `jahiaComponent` call with `properties: { "cache.expiration": "0" }`.
 Fix: never set expiration to 0. If truly fresh data is needed, use a small value like `"5"` (5 seconds) to still protect under load.
 
-**C8 — CND two-tier split violation**
+**C8 — Custom `title` or manual `jcr:title` instead of `mix:title`**
+Check: any CND type that declares `- title (string) ... i18n` or `- "jcr:title" (string) i18n` as an explicit property, instead of extending `mix:title`.
+Fix: add `mix:title` to the supertypes and remove the custom property declaration. In `types.ts`, use `"jcr:title"?: string`. In server views, destructure `"jcr:title": title` and add `?? currentNode.getName()` as a fallback. In `.properties`, override the field label with `typeName.jcr:title=Your label` if needed.
+
+**C9 — Missing `mix:title` on content types**
+Check: any CND type extending `jnt:content`, `jmix:editorialContent`, or `jmix:mainResource` that does **not** include `mix:title` in its supertype list.
+Fix: add `mix:title` to the supertypes. jContent uses `jcr:title` as the node's display name; without it, the node is shown by its technical ID in the content tree.
+
+**C11 — CND two-tier split violation**
 Check (a): `settings/definitions.cnd` contains a component type (`[ns:something] > jnt:content`) — component types must live in `src/components/<Name>/definition.cnd`, not in settings.
 Check (b): a `src/components/<Name>/definition.cnd` contains namespace declarations (`<ns = '...'>`). Component-level CND files must not repeat namespace declarations — those belong exclusively in `settings/definitions.cnd`. `@jahia/vite-plugin` auto-merges all `*.cnd` files at build time so namespace prefixes declared in settings are available everywhere.
 Fix (a): move the type definition to `src/components/<Name>/definition.cnd`.
 Fix (b): delete the namespace declaration lines from the component-level file.
 
-**C9 — Generic area type used for every Area**
+**C12 — Generic area type used for every Area**
 Check: page templates where every `<Area>` uses the same generic area type (e.g. `nodeType="namespace:pageArea"` everywhere). This means editors see ALL `pageComponent` types as droppable options in every area — a hero section will appear as an option in a feature card grid.
 Fix: create **one typed area node per section** in `settings/definitions.cnd`, each with a tight child constraint:
 ```cnd
