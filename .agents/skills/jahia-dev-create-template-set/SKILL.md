@@ -57,6 +57,15 @@ The CLI prompts three questions:
 | `An empty template set` | Blank canvas with wiring only, no sample content. For experienced developers who don't want to delete examples. |
 | `An empty module` | No front-end at all — choose this only for utility/library modules with no views. Do **not** use for building a site. |
 
+> ⚠️ **`module-type` in `package.json` — get this right before deploying**
+>
+> | `module-type` | What it means | Use when |
+> |---|---|---|
+> | `templatesSet` | This IS the site's template set — provides `jnt:page` views and the HTML shell | You are building the main site skin |
+> | `module` | Add-on — contributes content types and views installed alongside a template set | You are building a feature module (blog, events, search, etc.) |
+>
+> A site can have only **one** `templatesSet` installed. An add-on declared as `templatesSet` will conflict with the site's real template set and fail deployment. If in doubt: add-ons are always `module`.
+
 ---
 
 ## Step 3 — After generation
