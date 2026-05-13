@@ -165,11 +165,24 @@ import { Render } from "@jahia/javascript-modules-library";
 
 ### `linkTypeInitializer` — rendering links
 
-When a CND type uses `choicelist[linkTypeInitializer]`, the `j:linkType` property is a discriminator, NOT a URL. Use a `switch` statement:
+`choicelist[linkTypeInitializer]` creates a link picker in the editor. The editor selects a link type, which causes Jahia to **automatically inject a mixin** onto the node:
+
+| Link type value | Mixin injected | Property provided |
+|---|---|---|
+| `"internal"` | `jmix:internalLink` | `j:linknode` — weakreference to a page/resource |
+| `"external"` | `jmix:externalLink` | `j:url` — i18n string, locale-resolved automatically |
+| `"none"` | _(nothing)_ | _(nothing)_ |
+
+> `j:linknode` and `j:url` are **never declared in your CND**. They appear at runtime when the editor picks a link type.
+
+**Two patterns depending on how you named your discriminator property:**
+
+#### Pattern A — Native Jahia property name `j:linkType`
+
+When the CND uses `- j:linkType (string, choicelist[linkTypeInitializer])`, the value is available in props directly. Use a `switch` on `props["j:linkType"]`:
 
 ```tsx
 import { buildNodeUrl, jahiaComponent } from "@jahia/javascript-modules-library";
-import type { Props } from "./types.js";
 
 jahiaComponent(
   { componentType: "view", nodeType: "namespace:callToAction" },
@@ -187,6 +200,45 @@ jahiaComponent(
 ```
 
 The `Props` type must be a discriminated union (see `jahia-dev-define-content-type` skill).
+
+#### Pattern B — Custom property name (e.g. `ctaType` from a `linkTo` mixin)
+
+When the module defines its own `linkTo` mixin with a custom property name — which is the recommended convention for project modules — use `resolveCtaHref(currentNode)`. Read from `currentNode` directly because the injected fields are not typed in `Props`:
+
+```tsx
+import { buildNodeUrl, jahiaComponent } from "@jahia/javascript-modules-library";
+import type { JCRNodeWrapper } from "org.jahia.services.content";
+
+/**
+ * Resolves the CTA href from the linkTo mixin.
+ * Reads ctaType (or your custom property name), then reads the injected
+ * j:linknode / j:url depending on which mixin Jahia added at runtime.
+ */
+function resolveCtaHref(node: JCRNodeWrapper): string {
+  if (!node.hasProperty("ctaType")) return "#";
+  const type = node.getProperty("ctaType").getString();
+  if (type === "internal" && node.hasProperty("j:linknode")) {
+    return buildNodeUrl(node.getProperty("j:linknode").getNode() as JCRNodeWrapper);
+  }
+  if (type === "external" && node.hasProperty("j:url")) {
+    // j:url is i18n — JCR session already locale-resolved
+    return node.getProperty("j:url").getString() ?? "#";
+  }
+  return "#";
+}
+
+jahiaComponent(
+  { componentType: "view", nodeType: "namespace:hero" },
+  ({ ctaLabel }: Props, { currentNode }) => {
+    const ctaHref = resolveCtaHref(currentNode);
+    return ctaHref !== "#" ? (
+      <a href={ctaHref} className="cta-button">{ctaLabel}</a>
+    ) : null;
+  },
+);
+```
+
+> See `jahia-link-patterns.md` for the full context on the `linkTo` mixin convention, GraphQL mutations, and the complete non-negotiables list.
 
 ### Cache properties — controlling fragment caching
 

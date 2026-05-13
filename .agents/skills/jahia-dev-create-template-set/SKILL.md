@@ -86,15 +86,28 @@ To run the module locally, use the `/jahia-dev-start-local` skill next.
 
 ---
 
-## Step 4 — Read and summarize the README
+## Step 4 — Create README.md
 
-After scaffolding, read the generated `README.md`:
+Every module must have a `README.md` at its root. If the archetype generated one, update it to match the actual module. If it is absent, create it.
 
-```bash
-cat <project-name>/README.md
-```
+The README must cover:
 
-Summarize its contents for the user — key commands, how to start Jahia, how to deploy — and tell them: **"Make sure to read the full README.md in your module — it has everything you need to get started."**
+| Section | Contents |
+|---|---|
+| **Overview** | One-line description + table of content types |
+| **Requirements** | Jahia version, engine dependency, module-type note |
+| **Installation** | `yarn install`, `yarn build`, `yarn jahia-deploy`, `.env` variables |
+| **Content Types** | For each `*.cnd` type: supertypes, property table (name / type / mandatory / i18n / description) |
+| **CND Architecture** | Two-tier split table (settings vs component files) |
+| **CSS** | How the stylesheet is injected (`AddResources` + `buildModuleFileUrl`) |
+| **Internationalisation** | Which locale files exist and what each covers |
+| **Project Structure** | Annotated directory tree |
+| **Development** | `yarn dev`, type-check, watch mode |
+| **Licence** | Licence identifier |
+
+> **Template in the wild:** see `jahia-events-calendar/README.md` for a full worked example to copy from.
+
+After writing the README, tell the user: **"README.md created at the module root — update it whenever you add new content types or change the API."**
 
 ---
 
@@ -137,4 +150,5 @@ If anything goes wrong during setup or scaffolding, refer to the official Jahia 
 - [ ] Module directory created with expected structure
 - [ ] `yarn install` completes without errors
 - [ ] `src/types.d.ts` exists with `/// <reference types="vite/client" />` (required for CSS Module type resolution in tsc)
+- [ ] `README.md` created/updated at module root with all required sections
 - [ ] README.md summarized for the user

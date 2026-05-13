@@ -1,6 +1,6 @@
 ---
 name: jahia-dev-review
-description: Reviews a Jahia JavaScript module for generic and Jahia-specific best practices. Scans CND definitions, TypeScript views, and page templates. Reports issues in order of importance with fix suggestions. Covers 8 critical checks, 9 warnings, and 10 suggestions.
+description: Reviews a Jahia JavaScript module for generic and Jahia-specific best practices. Scans CND definitions, TypeScript views, and page templates. Reports issues in order of importance with fix suggestions. Covers 8 critical checks, 10 warnings, and 10 suggestions.
 ---
 
 # Skill: jahia-dev-review
@@ -126,6 +126,13 @@ Fix: add an `import.xml` with a homepage node (`j:isHomePage="true"`). Also add 
 **W8 — Node type extends something other than `jnt:content`**
 Check: CND types that extend anything other than `jnt:content`, `jnt:page`, `jmix:*`, or standard Jahia base types.
 Fix: extend only `jnt:content` (or `jnt:page` for page types). To add fields to a type you don't control, use a mixin with `extends=<targetType>`. Unusual inheritance chains break edition interfaces in unpredictable ways.
+
+**W10 — Missing README.md**
+Check: look for `README.md` at the module root.
+```bash
+ls README.md 2>/dev/null || echo "MISSING"
+```
+Fix: create a `README.md` covering: overview, requirements, installation, all content types with their property tables, CND architecture, CSS injection pattern, i18n files, project structure, and development commands. See `jahia-dev-create-template-set` for the full required-sections checklist. Without a README, developers taking over the module cannot understand its API without reading every source file.
 
 **W9 — Hardcoded link URLs in views**
 Check: any `.server.tsx`, `.client.tsx`, or template file containing a literal `href="http`, `href="/"`, or `href="/en/` (except in edit-mode chrome helpers). Also flag plain string `src="http` for non-bundled assets. Also flag any content data with `j:linkType: "external"` pointing to a path that looks like an internal Jahia URL (e.g. `/sites/`, `/cms/`, `/en/`).

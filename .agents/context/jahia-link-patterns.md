@@ -68,6 +68,19 @@ Use when a component has multiple styled buttons or when the button style varies
 
 ## Server-Side Link Resolution (TSX)
 
+### Which property name to use
+
+Two conventions exist in Jahia projects:
+
+| Convention | CND property | When used | Resolution strategy |
+|---|---|---|---|
+| Native Jahia | `j:linkType` | When extending `jmix:link` directly | `switch (props["j:linkType"])` — value is in props |
+| Custom `linkTo` mixin | `ctaType` (or your name) | Project modules — recommended | `resolveCtaHref(currentNode)` — read node directly |
+
+With the custom `linkTo` mixin, `j:linknode` and `j:url` come from dynamically-injected mixins and are not statically typed in `Props`. Reading them via `currentNode` is safer and does not require a discriminated union.
+
+### `resolveCtaHref` — canonical implementation
+
 ```tsx
 import { buildNodeUrl } from "@jahia/javascript-modules-library";
 import type { JCRNodeWrapper } from "org.jahia.services.content";
@@ -90,14 +103,13 @@ function resolveCtaHref(node: JCRNodeWrapper): string {
 
 ```tsx
 const ctaHref = resolveCtaHref(currentNode);
-const ctaLabel = currentNode.hasProperty("linkText")
-  ? currentNode.getProperty("linkText").getString()
-  : "";
 
-return ctaHref && ctaHref !== "#" ? (
-  <a href={ctaHref} className="cta-button">{ctaLabel}</a>
+return ctaHref !== "#" ? (
+  <a href={ctaHref} className="cta-button">{ctaLabel || t("event.register")}</a>
 ) : null;
 ```
+
+> Render the CTA button only when `ctaHref !== "#"` — never show a broken `#` link. Guard against `isCancelled` too when relevant.
 
 ---
 
