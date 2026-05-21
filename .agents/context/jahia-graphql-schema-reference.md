@@ -720,6 +720,7 @@ query {
 | Input types get `Input` prefix in schema | `SurveyAnswerInput` in Java → `InputSurveyAnswerInput` in schema | Run introspection to verify the actual schema name before writing client mutations |
 | `@GraphQLNonNull List<T>` maps to `[T]!` not `[T!]!` | Schema validation rejects `[T!]!` in client | Only the list is non-null; items are nullable unless separately annotated |
 | Missing `X-Requested-With: XMLHttpRequest` | `IllegalStateException("XHR header required")` from server | survey-service CSRF guard requires this header on every mutation call |
+| Missing `uuid` + `workspace` on a `GenericJCRNode` selection | Apollo logs `"Missing fields uuid,workspace while extracting key from GenericJCRNode"` and degrades to per-query caching | Add `uuid` and `workspace` to **every** node selection set, including aliased descendants (`descendant`, `children.nodes`, etc.) — Apollo uses these two fields as the composite cache key for all JCR node types |
 
 ---
 
