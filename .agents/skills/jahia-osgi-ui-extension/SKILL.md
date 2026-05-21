@@ -344,6 +344,120 @@ return null;
 
 ---
 
+## GraphQL data fetching
+
+### The golden rule: never use axios
+
+In a jcontent UI extension, **all GraphQL calls must go through the Apollo client — never axios, fetch, or any custom HTTP helper.**
+
+`@apollo/client` is declared as a **shared Module Federation singleton** by `@jahia/webpack-config`. This means your extension resolves the exact same Apollo client instance that jcontent itself uses. That client is already configured with:
+- Endpoint: `/modules/graphql`
+- Auth: session-cookie (the editor's existing jcontent session — no credentials needed)
+- Cache and error policies pre-configured
+
+### Two contexts, two patterns
+
+#### 1. Inside an adminRoute panel (most common)
+
+Components rendered via `registry.add('adminRoute', ...)` are mounted **inside** jcontent's React tree. Apollo's context is already provided by jcontent's `ApolloProvider`. Use hooks directly — no setup required:
+
+```javascript
+import {gql} from '@apollo/client';
+import {useQuery, useLazyQuery, useApolloClient} from '@apollo/client';
+
+// Define queries as static gql tags (not functions — Apollo needs static AST nodes)
+const MY_QUERY = gql`
+    query MyQuery($siteKey: String!) {
+        jcr(workspace: LIVE) {
+            nodesByCriteria(criteria: {
+                nodeType: "my:type"
+                paths: ["/sites/$siteKey"]
+                pathType: ANCESTOR
+            }) {
+                nodes { uuid path displayName(language: "en") }
+            }
+        }
+    }
+`;
+
+// ✅ Correct — useQuery resolves against jcontent's shared Apollo client
+const MyPanel = () => {
+    const siteKey = window.contextJsParameters?.siteKey || '';
+
+    const {data, loading, error} = useQuery(MY_QUERY, {
+        variables: {siteKey},
+        skip: !siteKey
+    });
+
+    const nodes = data?.jcr?.nodesByCriteria?.nodes || [];
+    // ...
+};
+```
+
+For one-shot imperative calls (e.g. export, confirm-then-fetch), use `useApolloClient`:
+
+```javascript
+const client = useApolloClient();
+
+const handleExport = async () => {
+    const result = await client.query({
+        query: MY_QUERY,
+        variables: {siteKey, limit: 9999, offset: 0},
+        fetchPolicy: 'network-only'   // bypass cache for fresh export data
+    });
+    const nodes = result.data?.jcr?.nodesByCriteria?.nodes || [];
+    // ... generate CSV/JSON blob
+};
+```
+
+#### 2. Inside a dialog rendered in a portal (outside jcontent's tree)
+
+Dialog managers use `ReactDOM.createRoot` on a detached DOM node — **outside** jcontent's React tree — so the Apollo context is not inherited. You must wrap with `ApolloProvider` and pass the client explicitly:
+
+```javascript
+import {ApolloProvider} from '@apollo/client';
+
+// The apolloClient is received from the action's context (passed by jcontent)
+open({path, language, apolloClient}) {
+    this.root.render(
+        <ApolloProvider client={apolloClient}>
+            <I18nextProvider i18n={i18next}>
+                <MyDialog path={path} language={language} onClose={() => this.close()} />
+            </I18nextProvider>
+        </ApolloProvider>
+    );
+}
+```
+
+Inside `MyDialog`, `useQuery` / `useApolloClient` work normally because `ApolloProvider` is now in the tree.
+
+### Query authoring rules
+
+- Always use **static `gql` tagged templates** — never build query strings dynamically or as functions. Apollo's cache keys on the AST document, not a string.
+- Use **parameterized variables** (`$paths: [String]`) instead of interpolating values into the query string. This enables static `gql` tags and Apollo caching.
+- For LIVE workspace data (UGC — survey responses, comments, etc.), use `jcr(workspace: LIVE)`.
+- For editorial content (pages, components), use `jcr` (defaults to `default` workspace).
+- Use `nodesByCriteria` with `$paths` over `nodesByQuery` with interpolated SQL2 — it's safer and properly parameterized.
+
+### Anti-patterns — never do these
+
+```javascript
+// ❌ Never — axios has no session auth and is not the shared client
+import axios from 'axios';
+const data = await axios.post('/modules/graphql', {query, variables});
+
+// ❌ Never — fetch bypasses Apollo cache and CSRF guard
+const res = await fetch('/modules/graphql', {method: 'POST', body: JSON.stringify({query})});
+
+// ❌ Never — dynamic query strings break Apollo caching
+const buildQuery = (siteKey) => `query { jcr { nodesByQuery(query: "... WHERE ... '${siteKey}'") { ... } } }`;
+
+// ❌ Never — useQuery inside a portal without ApolloProvider (context missing)
+// DialogManager.open() → renders outside jcontent tree → useQuery will throw
+```
+
+---
+
 ## Dialog pattern
 
 When an action opens a dialog, use a portal manager — the dialog must be rendered outside the jcontent component tree to avoid focus-trap and z-index issues.
