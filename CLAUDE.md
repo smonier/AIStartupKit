@@ -350,6 +350,7 @@ All new code — regardless of module type — is held to these standards at mer
 - `@jahia/javascript-modules-library` API reference: [`.agents/context/javascript-modules-library-api.md`](.agents/context/javascript-modules-library-api.md)
 - Production patterns reference (luxe-jahia-demo): [`.agents/context/jahia-js-reference-patterns.md`](.agents/context/jahia-js-reference-patterns.md)
 - Front-end/back-end communication patterns: [`.agents/context/jahia-frontend-backend-patterns.md`](.agents/context/jahia-frontend-backend-patterns.md)
+- **GraphQL schema reference** (introspected from live instance — JCRQuery, JCRMutation, JCRNode, JCRProperty, all input types, enums, survey extension, common patterns, traps): [`.agents/context/jahia-graphql-schema-reference.md`](.agents/context/jahia-graphql-schema-reference.md)
 - Custom content editor widgets (SelectorType): [`.agents/context/jahia-selectortype-pattern.md`](.agents/context/jahia-selectortype-pattern.md)
 - i18n file locations, key conventions, useTranslation, loadNamespaces: [`.agents/context/jahia-i18n-patterns.md`](.agents/context/jahia-i18n-patterns.md)
 - Native node types (CND source): https://github.com/Jahia/jahia/tree/master/war/src/main/webapp/WEB-INF/etc/repository/nodetypes

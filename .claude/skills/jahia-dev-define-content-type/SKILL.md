@@ -171,21 +171,43 @@ The short prefix (e.g. `llmacademy`) is the namespace to use for all node types 
 | `weakreference, picker[type='image']` | Image picker |
 | `weakreference multiple` | List of references (e.g. links to multiple pages) |
 | `string, choicelist[linkTypeInitializer]` | Link type discriminator (internal page / external URL / none) — **special initializer, not a value list** |
-| `string, choicelist` with `< 'val1', 'val2'` constraints | Dropdown with fixed choices (see below) |
+| `string, choicelist[resourceBundle]` with `< 'val1', 'val2'` constraints | Dropdown with translated labels — **always use this for fixed lists** (see below) |
 | `date` | Date picker |
 | `boolean` | Checkbox |
 | `double` | Decimal number (e.g. latitude/longitude) |
 | `long` | Integer number |
 | `string multiple` | List of strings |
 
-### Fixed-choice dropdowns (constrained string)
+### Fixed-choice dropdowns — always use `choicelist[resourceBundle]`
 
-Use `(string, choicelist)` combined with value constraints (`< 'val1', 'val2'`) to render a dropdown in the editor. **Do NOT use `choicelist[val1,val2]`** — that syntax is invalid:
+**Always use `(string, choicelist[resourceBundle])` for fixed-value dropdowns.** Plain `(string, choicelist)` without `[resourceBundle]` shows raw stored values (e.g. `draft`) instead of human-readable labels (e.g. `Draft`) in the content editor. **Do NOT use `choicelist[val1,val2]`** — that syntax is invalid.
 
 ```cnd
-[namespace:article] > jnt:content
- - difficulty (string, choicelist) i18n < 'beginner', 'intermediate', 'advanced'
- - product (string, choicelist) i18n < 'jahia', 'jexperience', 'cloud'
+// ✅ CORRECT — editor sees "Draft", "In Review", "Published"
+- status (string, choicelist[resourceBundle]) = 'draft' autocreated i18n < 'draft', 'review', 'published'
+
+// ❌ WRONG — editor sees raw values: "draft", "review", "published"
+- status (string, choicelist) i18n < 'draft', 'review', 'published'
+```
+
+The `.properties` file keys must follow the pattern `{cnd-namespace}_{typeName}.{ns}_{propName}.{value}` — the `:` namespace separator is replaced by `_`:
+
+```properties
+# namespace_typeName.ns_propName.constraintValue=Display label
+namespace_myType.ns_status.draft=Draft
+namespace_myType.ns_status.review=In Review
+namespace_myType.ns_status.published=Published
+```
+
+Real example — `euint:alertBanner`, property `eui:level`:
+```cnd
+- eui:level (string, choicelist[resourceBundle]) mandatory < 'info', 'warning', 'error', 'success'
+```
+```properties
+euint_alertBanner.eui_level.info=Information
+euint_alertBanner.eui_level.warning=Warning
+euint_alertBanner.eui_level.error=Error
+euint_alertBanner.eui_level.success=Success
 ```
 
 ### Choicelist initializer variants
@@ -194,31 +216,59 @@ Use `(string, choicelist)` combined with value constraints (`< 'val1', 'val2'`) 
 
 | Initializer | What editor sees |
 |---|---|
+| `choicelist[resourceBundle]` | Labels from `.properties` keys `ns_type.ns_prop.value=Label` — **default for fixed lists** |
 | `choicelist[linkTypeInitializer]` | Internal page / External URL / None link picker |
 | `choicelist[nodes=/path/to/folder;type=jnt:content]` | Picker populated from JCR nodes under a path |
 | `choicelist[componentTypes=jnt:page]` | Picker showing all registered views of a node type |
 | `choicelist[country]` | Country selector (ISO codes with localized labels) |
 | `choicelist[menus]` | Picker for existing menus defined on the site |
-| `choicelist[resourceBundle]` | Labels come from `.properties` file keys matching `ns_type.field.value` |
 
 ```cnd
+// Resource bundle labels — PREFERRED for all fixed lists
+- status (string, choicelist[resourceBundle]) = 'draft' autocreated i18n < 'draft', 'review', 'published'
+
 // Country picker — stores ISO code, shows localized country name in editor
 - country (string, choicelist[country]) i18n
 
 // Node picker — editor selects from nodes under a specific folder
 - template (string, choicelist[nodes=/sites/mySite/templates;type=jnt:content])
-
-// Component type picker — shows all views of jnt:page registered in the module
-- pageLayout (string, choicelist[componentTypes=jnt:page])
-
-// Resource bundle labels — values come from .properties keys
-- status (string, choicelist[resourceBundle]) i18n < 'draft', 'review', 'published'
-// In .properties: namespace_typeName.status.draft=Draft
-//                 namespace_typeName.status.review=In Review
-//                 namespace_typeName.status.published=Published
 ```
 
-> ⚠️ `choicelist[linkTypeInitializer]` is a **special initializer keyword** (not a value list) — see the link pattern section below. For fixed lists without dynamic labels, always use `(string, choicelist)` + `< 'val1', 'val2'`.
+> ⚠️ `choicelist[linkTypeInitializer]` is a **special initializer keyword** (not a value list) — see the link pattern section below.
+
+### JSON fieldset override — inline labels without `.properties`
+
+As an alternative to `choicelist[resourceBundle]`, you can embed labels directly in a JSON fieldset file. This bypasses the `.properties` system — useful for rapid prototyping or when the labels are identical in all locales (e.g. numbers, icons, technical codes).
+
+File location: `settings/content-editor-forms/fieldsets/<cnd-namespace>_<typeName>.json`
+
+```json
+{
+  "name": "namespace:myType",
+  "fields": [
+    {
+      "name": "ns:columns",
+      "selectorType": "Choicelist",
+      "selectorOptionsMap": { "allowCustomEntry": "false" },
+      "valueConstraints": [
+        { "displayValue": "1 column",  "value": { "type": "String", "value": "1" } },
+        { "displayValue": "2 columns", "value": { "type": "String", "value": "2" } },
+        { "displayValue": "3 columns", "value": { "type": "String", "value": "3" } },
+        { "displayValue": "4 columns", "value": { "type": "String", "value": "4" } }
+      ]
+    }
+  ]
+}
+```
+
+When to use each approach:
+
+| Approach | Use when |
+|---|---|
+| `choicelist[resourceBundle]` + `.properties` | Values need translated labels (EN/FR), or the list is reused across multiple types |
+| JSON `valueConstraints` | Labels are locale-independent (numbers, icon keys, codes), or you need `RadioChoiceList` / custom `selectorType` |
+
+> ⚠️ JSON `valueConstraints` override the `.properties` labels entirely — the `.properties` keys are still needed for the property label and tooltip, but the value labels come from the JSON only.
 
 Use `< "[-90,90]"` to restrict a numeric property to a range:
 
@@ -489,11 +539,14 @@ If Jahia rejects the type definition (e.g. breaking change), use the **Installed
 - [ ] Uses `namespacemix:component` or `namespacemix:pageComponent` — **never** `jmix:droppableContent` directly
 - [ ] All required properties have the `mandatory` attribute
 - [ ] All user-facing string/text fields have `i18n` (default to always)
+- [ ] **All fixed-value dropdowns use `(string, choicelist[resourceBundle])` — never bare `(string, choicelist)`**
+- [ ] **Every `choicelist[resourceBundle]` constraint value has a corresponding `.properties` key in EN + FR** (`ns_type.ns_prop.value=Label`)
+- [ ] **OR** a JSON fieldset `valueConstraints` override is present in `settings/content-editor-forms/fieldsets/`
 - [ ] Structural/container types have `jmix:hiddenType` (not shown in picker) — do NOT use `jmix:studioOnly`
 - [ ] `jmix:mainResource` only used for listing + detail content (not visual composition)
 - [ ] `types.ts` created with correct TypeScript types
 - [ ] Views handle null/missing values gracefully (mandatory does not guarantee a value)
-- [ ] Translation keys added to `.properties` files (EN + FR minimum)
+- [ ] Translation keys added to `.properties` files (EN + FR minimum), including `.ui.tooltip` for every property
 - [ ] Icon created at `settings/content-types-icons/<namespace>_<typeName>.png`
 - [ ] `yarn build && yarn jahia-deploy` run and type appears in Jahia content editor with correct label and icon
 

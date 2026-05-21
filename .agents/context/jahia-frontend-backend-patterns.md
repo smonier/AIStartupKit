@@ -852,9 +852,144 @@ Rules:
 
 ---
 
+## Traps — graphql-java-annotations (confirmed in production)
+
+These traps apply to every OSGi GraphQL extension that uses `graphql-java-annotations`.
+
+### INPUT object setters are never called — read args from DataFetchingEnvironment
+
+`graphql-java-annotations` creates INPUT object instances via the default constructor but **never calls the setter methods**. Every field stays `null` regardless of what the client sent. The mutation returns `success: true` but all data is silently lost. This was confirmed by diagnostic logging: `class=AnswerInput questionPath=null optionId=null` for every entry.
+
+**The fix:** keep the typed parameter in the signature (needed for schema generation), but ignore it at runtime. Always read from `DataFetchingEnvironment.getArgument()`:
+
+```java
+// ✅ CORRECT — graphql-java always provides List<Map<String,Object>> for INPUT_OBJECT lists
+@SuppressWarnings("unchecked")
+List<Map<String, Object>> rawAnswers =
+        (List<Map<String, Object>>) environment.getArgument("answers");
+
+// Process from the raw map — field names match the GQL schema field names
+rawAnswers.stream()
+    .filter(m -> m.get("questionPath") instanceof String && m.get("optionId") instanceof String)
+    .forEach(m -> {
+        String questionPath = (String) m.get("questionPath");
+        String optionId     = (String) m.get("optionId");
+        // ...
+    });
+
+// ❌ WRONG — List<AnswerInput> answers parameter: instances created, setters never called
+// answers.get(0).getQuestionPath() → always null
+```
+
+**Diagnostic code** (add temporarily to confirm):
+
+```java
+log.info("answers[0]: class={} questionPath={}",
+    answers.get(0).getClass().getName(),
+    answers.get(0).getQuestionPath());  // will show "null" if this trap is hit
+```
+
+### INPUT type schema name has "Input" prefix
+
+`graphql-java-annotations` prepends `Input` to the `@GraphQLName` value for all input types. A class annotated `@GraphQLName("SurveyAnswerInput")` appears in the schema as **`InputSurveyAnswerInput`**.
+
+```graphql
+# ❌ WRONG — uses the Java annotation name directly
+mutation Submit($answers: [SurveyAnswerInput]!) { ... }
+
+# ✅ CORRECT — schema name has "Input" prepended
+mutation Submit($answers: [InputSurveyAnswerInput]!) { ... }
+```
+
+**Always verify via introspection — never guess from the Java annotation:**
+```graphql
+{ __type(name: "MyMutations") { fields { name args { name type { kind name ofType { kind name } } } } } }
+```
+
+### `@GraphQLNonNull List<T>` maps to `[T]!` not `[T!]!`
+
+`@GraphQLNonNull` applies to the **list itself**, not to each item inside it. The schema type is `[T]!` (non-null list of nullable items). Declaring `[T!]!` in a client mutation adds item-level non-null that doesn't exist in the Java schema; Jahia's graphql-java validator rejects it with "Query did not validate".
+
+```java
+// Java
+@GraphQLName("answers") @GraphQLNonNull List<AnswerInput> answers
+// Schema result: [InputSurveyAnswerInput]!  (not [InputSurveyAnswerInput!]!)
+```
+
+```graphql
+# ❌ WRONG — item-level non-null rejected
+mutation Submit($answers: [InputSurveyAnswerInput!]!) { ... }
+
+# ✅ CORRECT
+mutation Submit($answers: [InputSurveyAnswerInput]!) { ... }
+```
+
+### `@GraphQLField` required on every getter — including INPUT types
+
+Any getter without `@GraphQLField` is silently omitted from the schema. If ALL getters on an INPUT class are missing the annotation, schema generation fails. If some are missing, those fields arrive as `null` at runtime. Annotate every getter on every GQL type (input and output).
+
+---
+
+## Traps — JCR GQL queries (confirmed in production)
+
+### `property()` vs `properties()` return different shapes
+
+| Query form | Return type | How to access a multi-value |
+|---|---|---|
+| `property(name: "x")` | Single `JCRProperty` object `{ value, values }` | `prop.values` |
+| `properties(names: ["x"])` | **Array** of `JCRProperty` objects | `props[0].values` |
+
+`properties(names: ["chosenOptions"]) { values }` then reading `.values` in TypeScript returns `undefined` — arrays don't have a `.values` property. The symptom is vote counts showing 0 even when data is correctly stored in JCR.
+
+```graphql
+# ❌ WRONG — returns Array; .values on an array is undefined
+chosenOptions: properties(names: ["chosenOptions"]) { values }
+
+# ✅ CORRECT — returns single object; .values works
+chosenOptions: property(name: "chosenOptions") { values }
+```
+
+### Anonymous users need `jcr(workspace: LIVE)` — DEFAULT returns PathNotFoundException
+
+Anonymous (unauthenticated) visitors have no read access to the `default` (editing) workspace. A `useGQLQuery` without a workspace argument queries DEFAULT. This produces `PathNotFoundException` for anonymous users even when the content exists in LIVE:
+
+```graphql
+# ❌ WRONG — anonymous users cannot read DEFAULT workspace
+query { jcr { nodeByPath(path: $path) { ... } } }
+
+# ✅ CORRECT — anonymous users can read LIVE workspace
+query { jcr(workspace: LIVE) { nodeByPath(path: $path) { ... } } }
+```
+
+This applies to both `useGQLQuery` in server views and `fetch` calls from client components. Any survey/poll/form component that renders to anonymous visitors must always use `workspace: LIVE`.
+
+### UUID is the stable node identifier — path varies by access context
+
+The `path` field on a GQL JCR node mirrors **how the node was accessed**, not its canonical JCR path. Accessing a node via a `jnt:contentReference` (render path, `@` format) returns a different `path` string than accessing it directly via its content path:
+
+| Access | `path` returned |
+|---|---|
+| Direct: `nodeByPath("/sites/s/contents/survey/q1")` | `/sites/s/contents/survey/q1` |
+| Via reference: `nodeByPath("/sites/s/home/page/area/ref@/ref/q1")` | `/sites/s/home/page/area/ref@/ref/q1` |
+
+If you store one path format and later look up by the other, the strings don't match — data is silently lost (votes invisible in results, references broken, etc.).
+
+**Rule: always use `uuid` as the stable key for any cross-context identity check.**
+
+```typescript
+// ❌ WRONG — path varies by access context; breaks when survey is placed via content reference
+const questions = rawQuestions.map((q) => ({ id: q.path, ... }));
+
+// ✅ CORRECT — UUID is always the same JCR identifier regardless of access method
+const questions = rawQuestions.map((q) => ({ id: q.uuid, ... }));
+```
+
+---
+
 ## References
 
 - Real-world proxy: `/Users/stephane/Runtimes/0.Modules/ai-landing-page-generation`
 - Real-world binary Action: `/Users/stephane/Runtimes/0.Modules/page-pdf-export`
+- Real-world GQL mutation + anonymous UGC write: `/Users/stephane/Runtimes/0.Modules/survey/survey-service`
 - OSGi CFG / ManagedService pattern: [`.agents/skills/jahia-osgi-module/SKILL.md`](../skills/jahia-osgi-module/SKILL.md)
 - OSGi UI extension Action registration: [`.agents/skills/jahia-osgi-ui-extension/SKILL.md`](../skills/jahia-osgi-ui-extension/SKILL.md)

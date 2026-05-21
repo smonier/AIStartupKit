@@ -263,6 +263,98 @@ One entry per Action name. Missing this file means every POST to those endpoints
 - Authentication is inherited from the HTTP request; resolvers run as the authenticated user.
 - Register as a `@Component(service = DXGraphQLExtensionsProvider.class)`.
 
+### `@GraphQLField` — mandatory on 4 distinct locations
+
+`graphql-java-annotations` reflects on classes to build the schema. **Any method or getter missing `@GraphQLField` is silently omitted.** This is the single most common mistake in agentic GraphQL extension development and must be checked before every code generation step.
+
+The annotation is required in **four distinct places**:
+
+| Location | What happens if missing |
+|---|---|
+| Factory method on `@GraphQLTypeExtension` class | The root field (`mutation.survey`, `query.tags`, etc.) is invisible — every client call fails with "field not found" |
+| Every method on the resolver class | That operation is invisible — client gets "field not found" for that mutation/query |
+| Every getter on every **OUTPUT** type | Those fields return `null` at runtime silently; all missing → type is empty, schema may fail |
+| Every getter on every **INPUT** type | Those fields are excluded from the input type; all missing → empty input type, schema generation fails |
+
+```java
+// 1. ✅ Factory method on @GraphQLTypeExtension — @GraphQLField REQUIRED here
+@GraphQLTypeExtension(DXGraphQLProvider.Mutation.class)
+public final class SurveyMutationsExtension {
+
+    @GraphQLField                          // ← REQUIRED: makes "survey" appear on root Mutation
+    @GraphQLName("survey")
+    @GraphQLDescription("Survey mutations")
+    public static SurveyMutations survey() {
+        return new SurveyMutations();
+    }
+}
+
+// 2. ✅ Each operation on the resolver — @GraphQLField REQUIRED here
+public class SurveyMutations {
+
+    @GraphQLField                          // ← REQUIRED: makes "submitResponse" appear
+    @GraphQLName("submitResponse")
+    public SurveyResponsePayload submitResponse(
+            @GraphQLName("surveyPath") @GraphQLNonNull String surveyPath,
+            @GraphQLName("answers")    @GraphQLNonNull List<AnswerInput> answers,
+            DataFetchingEnvironment env) { ... }
+}
+
+// 3. ✅ Every getter on an OUTPUT type — @GraphQLField REQUIRED on each
+public class SurveyResponsePayload {
+
+    @GraphQLField @GraphQLNonNull          // ← REQUIRED on every getter
+    public boolean isSuccess()    { return success; }
+
+    @GraphQLField @GraphQLNonNull          // ← REQUIRED on every getter
+    public String getCode()       { return code; }
+
+    @GraphQLField                          // ← REQUIRED on every getter (nullable ok)
+    public String getResponseId() { return responseId; }
+}
+
+// 4. ✅ Every getter on an INPUT type — @GraphQLField REQUIRED on each
+@GraphQLName("SurveyAnswerInput")
+public class AnswerInput {
+
+    @GraphQLField @GraphQLNonNull          // ← REQUIRED on every getter
+    public String getQuestionPath() { return questionPath; }
+
+    @GraphQLField @GraphQLNonNull          // ← REQUIRED on every getter
+    public String getOptionId()     { return optionId; }
+
+    // Setters have NO GQL annotations — only getters are reflected
+    public void setQuestionPath(String v) { this.questionPath = v; }
+    public void setOptionId(String v)     { this.optionId = v; }
+}
+```
+
+### Pre-generation checklist — run before writing any GQL extension class
+
+Before generating any GraphQL extension code, verify all four locations are annotated:
+
+- [ ] `@GraphQLField` on the factory method of every `@GraphQLTypeExtension` class
+- [ ] `@GraphQLField` on every mutation/query method of every resolver class
+- [ ] `@GraphQLField` on **every getter** of every output type (`Payload`, `Result`, `Response`)
+- [ ] `@GraphQLField` on **every getter** of every input type (`Input`, `Request`, `Args`)
+- [ ] Setters on input types have **no** GQL annotations
+- [ ] `@GraphQLNonNull` present where the field must not be nullable
+
+### INPUT object data — always read from DataFetchingEnvironment, never the typed parameter
+
+`graphql-java-annotations` creates INPUT object instances via reflection but **never calls the setter methods**. Every field stays `null` even when the client sent data. Always read INPUT list arguments from the raw environment:
+
+```java
+// ✅ CORRECT — graphql-java provides List<Map<String,Object>> for INPUT_OBJECT lists
+@SuppressWarnings("unchecked")
+List<Map<String, Object>> rawAnswers =
+    (List<Map<String, Object>>) environment.getArgument("answers");
+
+// ❌ WRONG — answers.get(0).getQuestionPath() always returns null
+```
+
+Keep the typed `List<AnswerInput> answers` parameter in the signature — it is needed for schema generation. Never use it for actual data access.
+
 ---
 
 ## Adding a dependency

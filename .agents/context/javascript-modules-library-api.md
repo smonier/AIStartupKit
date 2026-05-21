@@ -214,14 +214,16 @@ Like Area but shared across pages. The `readOnly` prop has three modes:
 
 ---
 
-### `<AddResources type url? key?>`
+### `<AddResources type resources key?>`
 
 Injects CSS or JS resources into `<head>` or `<body>`. Deduplicates by `key`.
 
 ```tsx
-<AddResources type="css" url={buildModuleFileUrl("css/vendor.css")} />
-<AddResources type="javascript" url={buildModuleFileUrl("js/analytics.js")} />
+<AddResources type="css" resources={buildModuleFileUrl("css/vendor.css")} key="my-module-css" />
+<AddResources type="javascript" resources={buildModuleFileUrl("js/analytics.js")} key="my-module-js" />
 ```
+
+> **CRITICAL**: The prop is `resources` (not `url`). Passing `url` silently does nothing — TypeScript will error if strict. **Always** wrap the path with `buildModuleFileUrl()` — a bare string like `"dist/assets/style.css"` does not resolve to the correct module-scoped URL at runtime and the resource will never load. The `key` prop is required for deduplication when the same component can be placed multiple times on a page.
 
 ---
 

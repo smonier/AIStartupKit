@@ -293,6 +293,64 @@ extends = ns:newsArticle
 
 ---
 
+---
+
+## UGC (User-Generated Content) written directly to LIVE workspace
+
+Survey responses, votes, form submissions, and other anonymous UGC are written **directly to the LIVE workspace** via a system session — they never go through the default→live publication workflow. Two CND traps apply exclusively to this pattern.
+
+### ❌ Using `jnt:contentList` as a UGC response container in LIVE
+
+`jnt:contentList` carries `jmix:editorialContent` and versioning child semantics (`+ * (jnt:content) = jnt:contentList version`). Writing child nodes directly to a `jnt:contentList` in LIVE fails with `ConstraintViolationException` due to those versioning constraints. The error is silent in some configurations — the parent node is created but children are never stored.
+
+```cnd
+// ❌ WRONG — jnt:contentList rejects direct LIVE writes
+[svy:survey] > jnt:content
+  + responses (jnt:contentList) hidden
+
+// ✅ CORRECT — custom lightweight container; no editorial mixins
+[svy:responseList] > jnt:content, jmix:hiddenType
+  orderable
+  + * (svy:surveyResponse)
+
+[svy:survey] > jnt:content
+  + responses (svy:responseList) hidden
+```
+
+```java
+// ✅ Correct
+surveyNode.addNode("responses", "svy:responseList");
+
+// ❌ Wrong
+surveyNode.addNode("responses", "jnt:contentList");
+```
+
+**Rule**: any container written directly to LIVE must extend `jnt:content` + `jmix:hiddenType` only — no content-area mixins, no versioning semantics.
+
+### ❌ Missing child node definition — addNode() silently rejected
+
+Without an explicit child node definition, Jackrabbit rejects `addNode()` with `ConstraintViolationException`. Worse, the parent node save succeeds, leaving orphan nodes with no data and no visible error.
+
+```cnd
+// ❌ WRONG — svy:surveyResponse has no child definition; addNode("svy:questionResponse") throws
+[svy:surveyResponse] > jnt:content, jmix:hiddenType
+  - email (string)
+
+// ✅ CORRECT — declare every level of the child chain explicitly
+[svy:surveyResponse] > jnt:content, jmix:hiddenType
+  orderable
+  - email (string)
+  + * (svy:questionResponse)           // ← required
+
+[svy:questionResponse] > jnt:content, jmix:hiddenType
+  - questionPath (string)
+  - chosenOptions (string) multiple
+```
+
+**Rule**: every CND type that stores child nodes must declare `+ * (childType)`. Follow the chain top-down: `responseList → surveyResponse → questionResponse`.
+
+---
+
 ## Validation Checklist
 
 - [ ] Namespace declared at top
@@ -305,3 +363,5 @@ extends = ns:newsArticle
 - [ ] Image references constrain to `< jmix:image`
 - [ ] No `j:tagList`, `j:defaultCategory`, `j:url`, or `j:linknode` declared directly
 - [ ] All user-facing text properties have `i18n` keyword
+- [ ] UGC containers in LIVE extend `jnt:content + jmix:hiddenType` only (not `jnt:contentList`)
+- [ ] Every type that stores child nodes declares `+ * (childType)` explicitly
