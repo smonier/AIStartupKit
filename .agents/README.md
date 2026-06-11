@@ -50,6 +50,12 @@ If you are an AI agent, this is the second file you read after [`../CLAUDE.md`](
 |---|---|
 | [`/jahia-osgi-ui-extension`](skills/jahia-osgi-ui-extension/SKILL.md) | Webpack/MF build, registry API, actions, dialogs, CSRF, TCCL, embedded libs |
 
+### Java actions and backend extension (JS module + Java)
+
+| Skill | When to use |
+|---|---|
+| [`/jahia-dev-java`](skills/jahia-dev-java/SKILL.md) | Jahia Action framework: live vs default workspace, system session for content writes, CSRF guard, Maven + Java 17 |
+
 ### OSGi/Java module development (pure Java, no front-end)
 
 | Skill | When to use |

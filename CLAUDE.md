@@ -241,10 +241,15 @@ whitelist = *.myActionName.do
 ### JCR access
 
 - Always run mutations as the calling user: `JCRTemplate.getInstance().doExecuteWithUserSession(...)`.
-- Never escalate to a system session for content the user authored or requested.
+- For public-facing write actions (likes, reactions) where users don't own the target node, use `JCRTemplate.getInstance().doExecuteWithSystemSession(cb)` and record the username as a property on the created node.
 - `JCRSessionWrapper` is not thread-safe — never hold across threads.
 
-> Detailed reference: [`.agents/skills/jahia-osgi-module/SKILL.md`](.agents/skills/jahia-osgi-module/SKILL.md)
+### Action endpoint workspaces
+
+- Action URL always uses `live` workspace: `POST /cms/render/live/{lang}/sites/{siteKey}.{actionName}.do` — this is what OIDC-authenticated site readers can call.
+- The `session` passed to `doExecute` is the live workspace session (read-only for content). Re-open a default session internally when writes are needed.
+
+> Detailed reference: [`.agents/skills/jahia-osgi-module/SKILL.md`](.agents/skills/jahia-osgi-module/SKILL.md) and [`.agents/skills/jahia-dev-java/SKILL.md`](.agents/skills/jahia-dev-java/SKILL.md)
 
 ---
 
@@ -269,6 +274,12 @@ The full harness index is at [`.agents/README.md`](.agents/README.md). Quick ref
 | `/jahia-dev-screenshot` | Visual comparison: reference vs Jahia render |
 | `/jahia-dev-debug` | Debug build/deploy/runtime errors |
 | `/jahia-dev-cypress` | Scaffold Cypress e2e tests for any new component |
+
+### Java actions (JS module + Java backend)
+
+| Skill | Purpose |
+|---|---|
+| `/jahia-dev-java` | Action framework: live vs default workspace, system session, CSRF, Maven Java 17 |
 
 ### OSGi development
 
@@ -318,6 +329,8 @@ All new code — regardless of module type — is held to these standards at mer
 8. **Never hardcode links or URLs** in views or templates. All navigable links come from contributed content.
 9. **Never use `jmix:studioOnly`** on structural types — use `jmix:hiddenType`.
 10. **Never declare `j:linknode` or `j:url` in a CND** — they are injected by Jahia's mixins.
+17. **Any mixin that stores hidden child nodes must declare `+ childName (Type) = Type version` in the mixin body.** Without this, `session.addNode()` throws `ConstraintViolationException: No child node definition found` at runtime. The child node definition in the mixin is what grants Jackrabbit permission to add that child to any node of a type that extends the mixin.
+18. **Keep all locale JSON files in sync (`fr.json`, `en.json`, `es.json`).** A key present in one file but missing in another renders as the raw key for visitors using that language.
 
 **OSGi UI extensions (Track 2)**
 
@@ -334,7 +347,7 @@ All new code — regardless of module type — is held to these standards at mer
 
 | Tool | URL |
 |---|---|
-| Jahia UI | http://localhost:8080 — default credentials: `root` / `root1234` |
+| Jahia UI | http://localhost:8080 — default credentials: `root` / `root` |
 | GraphQL playground | http://localhost:8080/modules/graphql |
 | JCR browser | http://localhost:8080/modules/tools/jcrBrowser.jsp |
 | Installed definitions | http://localhost:8080/modules/tools/definitionsBrowser.jsp |

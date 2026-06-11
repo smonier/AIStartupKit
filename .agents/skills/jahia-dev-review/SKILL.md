@@ -1,6 +1,7 @@
 ---
 name: jahia-dev-review
-description: Reviews a Jahia JavaScript module for generic and Jahia-specific best practices. Scans CND definitions, TypeScript views, page templates, and CSS. Reports issues in order of importance with fix suggestions. Covers 11 critical checks, 17 warnings, and 10 suggestions.
+description: Reviews a Jahia JavaScript module for generic and Jahia-specific best practices. Scans CND definitions, TypeScript views, and page templates. Reports issues in order of importance with fix suggestions. Covers 8 critical checks, 9 warnings, and 10 suggestions.
+allowed-tools: Bash, Read
 ---
 
 # Skill: jahia-dev-review
@@ -26,9 +27,8 @@ find src/ -name "definition.cnd" | sort
 find src/ -name "*.server.tsx" | sort
 find src/ -name "*.client.tsx" | sort
 find src/ -name "types.ts" | sort
-cat settings/definitions.cnd
 find src/templates/ -name "*.server.tsx" | sort
-find src/ -name "*.module.css" -o -name "*.css" | grep -v node_modules | sort
+cat settings/definitions.cnd
 ```
 
 Read ALL collected files before starting the review.
@@ -67,21 +67,11 @@ Fix: move server-side logic to the `.server.tsx` wrapper and pass results as ser
 Check: any `jahiaComponent` call with `properties: { "cache.expiration": "0" }`.
 Fix: never set expiration to 0. If truly fresh data is needed, use a small value like `"5"` (5 seconds) to still protect under load.
 
-**C8 — Custom `title` or manual `jcr:title` instead of `mix:title`**
-Check: any CND type that declares `- title (string) ... i18n` or `- "jcr:title" (string) i18n` as an explicit property, instead of extending `mix:title`.
-Fix: add `mix:title` to the supertypes and remove the custom property declaration. In `types.ts`, use `"jcr:title"?: string`. In server views, destructure `"jcr:title": title` and add `?? currentNode.getName()` as a fallback. In `.properties`, override the field label with `typeName.jcr:title=Your label` if needed.
+**C9 — Mixin stores hidden child nodes but declares no child node definition**
+Check: any mixin in `settings/definitions.cnd` that is paired with a `jmix:hiddenType` node for data storage (e.g. a `*Store` or `*Data` type), but does not declare `+ childName (Type) = Type version` in the mixin body.
+Fix: add `+ storageNodeName (storageType) = storageType version` to the mixin. Without this, `session.addNode("storageNodeName", "storageType")` throws `ConstraintViolationException: No child node definition found` at runtime regardless of whether the parent type extends the mixin.
 
-**C9 — Missing `mix:title` on content types**
-Check: any CND type extending `jnt:content`, `jmix:editorialContent`, or `jmix:mainResource` that does **not** include `mix:title` in its supertype list.
-Fix: add `mix:title` to the supertypes. jContent uses `jcr:title` as the node's display name; without it, the node is shown by its technical ID in the content tree.
-
-**C11 — CND two-tier split violation**
-Check (a): `settings/definitions.cnd` contains a component type (`[ns:something] > jnt:content`) — component types must live in `src/components/<Name>/definition.cnd`, not in settings.
-Check (b): a `src/components/<Name>/definition.cnd` contains namespace declarations (`<ns = '...'>`). Component-level CND files must not repeat namespace declarations — those belong exclusively in `settings/definitions.cnd`. `@jahia/vite-plugin` auto-merges all `*.cnd` files at build time so namespace prefixes declared in settings are available everywhere.
-Fix (a): move the type definition to `src/components/<Name>/definition.cnd`.
-Fix (b): delete the namespace declaration lines from the component-level file.
-
-**C12 — Generic area type used for every Area**
+**C8 — Generic area type used for every Area**
 Check: page templates where every `<Area>` uses the same generic area type (e.g. `nodeType="namespace:pageArea"` everywhere). This means editors see ALL `pageComponent` types as droppable options in every area — a hero section will appear as an option in a feature card grid.
 Fix: create **one typed area node per section** in `settings/definitions.cnd`, each with a tight child constraint:
 ```cnd
@@ -129,97 +119,90 @@ Fix: add an `import.xml` with a homepage node (`j:isHomePage="true"`). Also add 
 Check: CND types that extend anything other than `jnt:content`, `jnt:page`, `jmix:*`, or standard Jahia base types.
 Fix: extend only `jnt:content` (or `jnt:page` for page types). To add fields to a type you don't control, use a mixin with `extends=<targetType>`. Unusual inheritance chains break edition interfaces in unpredictable ways.
 
+**W10 — i18n locale files out of sync**
+Check: flatten all three locale JSON files (`fr.json`, `en.json`, `es.json`) to dot-separated key lists and diff them. Any key present in one file but missing from another will break at runtime for visitors using that language.
+```bash
+# Quick sync check — list keys present in fr but missing from en/es
+node -e "
+  const fs = require('fs');
+  const flatten = (obj, prefix='') => Object.keys(obj).flatMap(k =>
+    typeof obj[k] === 'object' ? flatten(obj[k], prefix+k+'.') : [prefix+k]);
+  const fr = flatten(JSON.parse(fs.readFileSync('settings/locales/fr.json')));
+  const en = flatten(JSON.parse(fs.readFileSync('settings/locales/en.json')));
+  const es = flatten(JSON.parse(fs.readFileSync('settings/locales/es.json')));
+  const missing = k => fr.filter(k2 => !k.includes(k2));
+  if(missing(en).length) console.log('Missing from en:', missing(en).join(', '));
+  if(missing(es).length) console.log('Missing from es:', missing(es).join(', '));
+"
+```
+Fix: add the missing keys with translations before shipping.
+
 **W9 — Hardcoded link URLs in views**
 Check: any `.server.tsx`, `.client.tsx`, or template file containing a literal `href="http`, `href="/"`, or `href="/en/` (except in edit-mode chrome helpers). Also flag plain string `src="http` for non-bundled assets. Also flag any content data with `j:linkType: "external"` pointing to a path that looks like an internal Jahia URL (e.g. `/sites/`, `/cms/`, `/en/`).
 Fix: **All navigable URLs must come from contributed content.** Use `j:linkType`/`j:linknode`/`j:url` props for editorial links, `buildNodeUrl(node)` for JCR node links.
 🚫 **NEVER use `j:linkType: "external"` to link to an internal Jahia page** — use `"internal"` + `j:linknode`. An external URL pointing internally breaks on environment changes, language switches, live/preview workspace toggling, and vanity URL rewrites. If no target page exists yet, omit the link; do not substitute an external workaround.
 
-**W10 — Missing README.md**
-Check: look for `README.md` at the module root.
-```bash
-ls README.md 2>/dev/null || echo "MISSING"
-```
-Fix: create a `README.md` covering: overview, requirements, installation, all content types with their property tables, CND architecture, CSS injection pattern, i18n files, project structure, and development commands. See `jahia-dev-create-template-set` for the full required-sections checklist. Without a README, developers taking over the module cannot understand its API without reading every source file.
-
-**W11 — Non-semantic HTML**
-Check: views that use `<div>` where `<article>`, `<section>`, `<nav>`, `<main>`, `<header>`, or `<footer>` would be more appropriate. Also check that each page has exactly one `<h1>` (the page title from `jcr:title`), and that component headings do not skip levels (h1 → h3 is invalid).
-Fix: use semantic HTML. Components should use `<h2>` for their primary heading (never `<h1>` — that belongs to the page template). Accept a `headingLevel` prop when the component may appear at different nesting depths.
-
-**W12 — Images without meaningful alt text**
-Check: `<img>` tags with `alt=""` unless there is a code comment marking the image as decorative (`/* decorative */`). Also check that images use `buildNodeUrl()` for `src` (never `getUrl()` or `getPath()`) and that ALL `<img>` tags have explicit `width` and `height` attributes to prevent Cumulative Layout Shift (CLS).
-Fix: add descriptive alt text. Decorative images use `alt=""` `aria-hidden="true"` with a comment. For LCP/hero images (above-the-fold), add `loading="eager"` `fetchpriority="high"`. All other images use `loading="lazy"` `width={w}` `height={h}`.
-
-**W13 — Missing `nsmix:seo` on `jmix:mainResource` types**
-Check: any CND type extending `jmix:mainResource` that does NOT include `nsmix:seo` in its supertypes.
-Fix: add `nsmix:seo` to the supertypes: `[ns:myPage] > jnt:content, mix:title, nsmix:seo, jmix:mainResource`. The `nsmix:seo` mixin provides `metaTitle`, `metaDescription`, `canonicalUrl`, `ogImage`, `ogType` fields. Without it, editors cannot control page titles shown in search results or social previews.
-
-**W14 — Missing skip link in page template**
-Check: page template files (`src/templates/**/*.server.tsx`) that do NOT contain an `<a href="#main-content">` skip link AND a `<main id="main-content">` target.
-Fix: add `<a href="#main-content" className={classes.skipLink}>Skip to main content</a>` as the first child of `<body>`, and ensure `<main id="main-content">` wraps the page content. This is WCAG 2.1 AA SC 2.4.1 (Bypass Blocks).
-
-**W15 — Missing hreflang for multilingual templates**
-Check: page templates that render `<head>` without `<link rel="alternate" hreflang="...">` tags. Any Jahia site with more than one active locale is a multilingual site.
-Fix: use the SeoMetaTags component pattern (see `jahia-seo-patterns.md`) which iterates `getSiteLocales()` and emits hreflang links. Without hreflang, Google treats locale variants as duplicate content and may suppress the correct locale from search results.
-
-**W16 — ARIA live regions missing in client Islands that update content**
-Check: `.client.tsx` Island files that update visible content dynamically (search results, form submission feedback, filter results, cart updates) without a `role="status"` or `role="alert"` element receiving the update announcement.
-Fix: add a visually-hidden `<div role="status" aria-live="polite" aria-atomic="true">` and update its text content when the main content changes. Example: after search results load, set it to `"12 results found"`. This is WCAG 2.1 AA SC 4.1.3 (Status Messages).
-
-**W17 — Missing visible focus indicators**
-Check: any CSS file (`*.module.css` or `*.css`) containing `outline: none` or `outline: 0` without a compensating `:focus-visible` rule that provides a clearly visible focus style.
-Fix: replace `outline: none` with a custom focus indicator:
-```css
-:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-```
-Never remove the focus outline without replacing it. This is WCAG 2.1 AA SC 2.4.7 (Focus Visible).
-
 ---
 
 ### 🔵 SUGGESTION — Quality improvements
 
-**S1 — Types using `any`**
+**S1 — Non-semantic HTML**
+Check: views that use `<div>` where `<article>`, `<section>`, `<nav>`, `<header>`, or `<footer>` would be more appropriate.
+Fix: use semantic HTML for better accessibility and SEO.
+
+**S2 — Images without meaningful alt text**
+Check: `<img>` tags with `alt=""` or no `alt` attribute (unless there's a comment saying it's decorative).
+Fix: add descriptive alt text. Decorative images should have `alt=""` with a comment.
+
+**S3 — Accessibility violations (axe-core audit)**
+Check: run `/jahia-dev-accessibility` against all live pages. A clean module has zero `critical` or `serious` violations.
+Common issues in Jahia modules:
+- `color-contrast`: hardcoded colours with insufficient contrast ratio — check with https://webaim.org/resources/contrastchecker/
+- `image-alt`: `<img>` missing a meaningful `alt` prop sourced from CND
+- `button-name`: icon-only `<button>` or `<a>` without `aria-label`
+- `landmark-one-main`: page template missing a `<main>` wrapper
+- `page-has-heading-one`: no `<h1>` rendered on any page
+- `heading-order`: skipped heading levels between components (e.g. h1 → h3)
+- `html-has-lang`: template not setting `lang` via `useServerContext().currentLanguage`
+- `focus-visible` suppressed: global `* { outline: none }` in CSS kills keyboard navigation
+
+Fix: identify each violating component by matching the axe target selector to a `.server.tsx` file, apply the fix, rebuild, and re-run the audit.
+
+**S4 — Types using `any`**
 Check: `types.ts` files or view files using TypeScript `any`.
 Fix: use `JCRNodeWrapper` for node references, `string` / `number` / `boolean` for primitives.
 
-**S2 — Bare `<Area>` without a `nodeType`**
+**S5 — Bare `<Area>` without a `nodeType`**
 Check: page templates using `<Area name="..." />` without a `nodeType` prop.
 Fix: create a custom area type with `jmix:list`, `jmix:hiddenType`, and `orderable`, and reference it with `nodeType="namespace:areaType"`.
 
-**S3 — `mix:title` inherited but `jcr:title` not in `types.ts`**
+**S6 — `mix:title` inherited but `jcr:title` not in `types.ts`**
 Check: CND types that extend `mix:title` but whose `types.ts` doesn't include `"jcr:title": string`.
-Fix: add `"jcr:title": string` to the Props type.
+Fix: add `"jcr:title"?: string` to the Props type.
 
-**S4 — Missing `.properties` file entries or icon for new content types**
-Check: for each node type found in `definition.cnd` files, verify that `settings/resources/<module>.properties` has a label (`cndNamespace_typeName=...`) and a corresponding icon exists at `settings/content-types-icons/<cndNamespace>_<typeName>.png`. The prefix must be the CND namespace (e.g. `llmacademy_heroSection.png`), **not** the module name with hyphens (e.g. `llm-academy_heroSection.png` is wrong — the archetype generates wrong names that must be manually corrected).
+**S7 — Missing `.properties` file entries or icon for new content types**
+Check: for each node type found in `definition.cnd` files, verify that `settings/resources/<module>.properties` has a label (`cndNamespace_typeName=...`) and a corresponding icon exists at `settings/content-types-icons/<cndNamespace>_<typeName>.png`. The prefix must be the CND namespace (e.g. `ns_heroSection.png`), **not** the module name with hyphens (e.g. `my-module_heroSection.png` is wrong — the archetype generates wrong names that must be manually corrected).
 Fix: add labels (and optionally `ui.tooltip` for fields) to the properties files. Rename any icons that use the module name with hyphens to use the CND namespace. Create a 32×32 PNG icon (free source: [flaticon.com](https://www.flaticon.com/)). Without these, editors see raw technical names and blank icon squares in the content picker.
 
-**S5 — Hardcoded user-visible strings in views**
+**S8 — Hardcoded user-visible strings in views**
 Check: `.server.tsx` / `.client.tsx` files with JSX string literals that are not coming from props or i18n functions (e.g. `<p>Learn more</p>`, `<button>Submit</button>`).
-Fix: move UI labels to i18n properties files and resolve them at render time, or make them configurable through CND properties. Hardcoded strings break multilingual sites.
+Fix: move UI labels to `settings/locales/en.json` and `fr.json` and resolve them with `useTranslation()`. Hardcoded strings break multilingual sites.
 
-**S6 — Content list queries not using `ISDESCENDANTNODE` (non-recursive)**
+**S9 — Content list queries not using `ISDESCENDANTNODE` (non-recursive)**
 Check: JCR-SQL2 queries using `jcr:path LIKE '/sites/.../content/%'` or a fixed path to limit results, instead of `ISDESCENDANTNODE(node, '/sites/.../content')`.
 Fix: use `ISDESCENDANTNODE` to ensure queries work correctly even if editors reorganize content into sub-folders.
 
-**S7 — No escape hatch when using a custom component mixin**
+**S10 — No escape hatch when using a custom component mixin**
 Check: a custom section type that restricts children to a custom mixin (e.g. `+ * (namespacemix:component)`) but the module provides no "content stack" escape hatch type that itself accepts `jmix:droppableContent`.
 Fix: add a `namespace:contentStack > jnt:content, namespacemix:component + * (jmix:droppableContent)` type so power editors can still add arbitrary content when needed.
 
-**S8 — Scaffold/boilerplate components still present**
+**S11 — Scaffold/boilerplate components still present**
 Check: components under `src/components/Hello/` (or any other archetype-generated boilerplate) that are no longer referenced in `settings/import.xml` and no longer used by any view or page template.
 ```bash
 # Check if Hello components are still referenced anywhere
 grep -r "helloWorld\|helloCard\|Hello/" src/templates/ settings/ --include="*.tsx" --include="*.xml" --include="*.cnd"
 ```
 Fix: once `import.xml` no longer provisions Hello World content and no template uses them, delete the entire `src/components/Hello/` directory, remove their entries from `.properties` files, and delete their icons from `settings/content-types-icons/`. Keeping dead components inflates the content picker and confuses editors.
-
-**S9 — Open Graph and Twitter Card meta tags missing**
-Check: page templates whose SeoMetaTags (or equivalent) component does not emit `og:title`, `og:description`, `og:image`, `og:url`, `og:type`, and `twitter:card`.
-Fix: extend the SeoMetaTags component to emit Open Graph and Twitter Card tags. Use the `nsmix:seo` `ogImage` field for the image. See `jahia-seo-patterns.md` for the full component pattern.
-
-**S10 — JSON-LD structured data missing on detail pages**
-Check: `jmix:mainResource` views that do not emit a `<script type="application/ld+json">` with Article, Event, or BreadcrumbList schema.
-Fix: add JSON-LD to the `fullPage` view. Map `jcr:title` to `"name"`, `startDate`/`endDate` to Event schema fields, etc. See `jahia-seo-patterns.md` for the `renderJsonLd` helper and schema examples.
 
 ---
 
@@ -232,7 +215,7 @@ Format the output as:
 
 ### 🔴 Critical (N issues)
 [C1] src/components/Hero/Section/definition.cnd — `jmix:droppableContent` used directly
-     Fix: extend `llmacademymix:component` instead
+     Fix: extend `namespacemix:component` instead
 
 ### 🟡 Warnings (N issues)
 ...

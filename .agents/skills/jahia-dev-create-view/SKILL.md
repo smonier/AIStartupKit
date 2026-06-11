@@ -1,6 +1,7 @@
 ---
 name: jahia-dev-create-view
 description: Implements a React view for a Jahia content type. Use when asked to create or update the rendering of a component, add a new view, or add styling.
+allowed-tools: Bash, Read, Write, Edit
 ---
 
 ## Overview
@@ -44,6 +45,35 @@ jahiaComponent(
     </section>
   ),
 );
+```
+
+`jahiaComponent` **returns its second argument** (the React component). Export it to reuse the component directly in other views:
+
+```tsx
+// small.server.tsx — registered as a named view AND exported for direct reuse
+export const SmallHero = jahiaComponent(
+  { componentType: "view", nodeType: "ns:heroSection", name: "small" },
+  ({ title, background }: Props) => <header style={{ backgroundImage: `url(${buildNodeUrl(background)})` }}><h1>{title}</h1></header>,
+);
+
+// fullPage.server.tsx — reuse the component directly without going through Jahia rendering
+import { SmallHero } from "../Hero/Section/small.server.jsx";
+<SmallHero title={title} background={cover} />
+```
+
+### When implementing a view from existing HTML
+
+When you have a source HTML fragment to translate (e.g. from `/jahia-dev-import-from`), apply only **mechanical transformations**:
+
+- `class=` → `className=`
+- Void elements: `<img>`, `<input>`, `<br>` → self-close with ` />`
+- `{placeholder}` text → `{propName}` matching `Props`
+
+**Never** remove, rearrange, or simplify elements. Every `data-*`, `aria-*`, `role`, `id`, `<noscript>`, and `<source>` must appear in the TSX output. Carousel and slider wrapper `id`s in particular must be preserved verbatim — JS libraries use them for initialization.
+
+**Self-check before finishing:** Count the attributes on 2–3 key elements in the source HTML. If the source `<div>` has 6 attributes and your TSX has 4, you dropped something — go back.
+
+**CSS class names:** Rename source HTML class names to CSS Module keys (`hero__title` → `classes.heroTitle`). If the component also imports a vendor CSS file as a static asset (see `jahia-dev-import-from`), those vendor classes stay as plain strings in the JSX — they are not processed by CSS Modules.
 ```
 
 ---
@@ -97,6 +127,23 @@ import { buildNodeUrl } from "@jahia/javascript-modules-library";
 
 <img src={buildNodeUrl(coverNode)} alt="Descriptive alt text" />
 <header style={{ backgroundImage: `url(${buildNodeUrl(background)})` }}>
+```
+
+**Options** (second argument):
+
+| Option | Default | Use |
+|---|---|---|
+| `extension` | `.html` | Change output extension, e.g. `extension: ".pdf"` |
+| `language` | current language | Override language: `language: "fr"` |
+| `mode` | current mode | Force workspace: `"edit"`, `"preview"`, or `"live"` |
+| `parameters` | — | Append query params: `parameters: { page: "2" }` |
+
+```tsx
+// Link to the blog page in the current language
+<a href={buildNodeUrl(renderContext.getSite().getNode("blog"))}>Blog</a>
+
+// Same link forced to French
+<a href={buildNodeUrl(blogNode, { language: "fr" })}>Blog (FR)</a>
 ```
 
 > ⚠️ **Always guard optional nodes**: `buildNodeUrl(undefined)` throws `"Expected a node in buildNodeUrl, received undefined"`. If the prop is optional in the CND, guard it:
@@ -157,32 +204,22 @@ import { Render } from "@jahia/javascript-modules-library";
 // Render a specific node by reference (also solves the weakreference cache issue)
 <Render node={cityNode} view="name" />
 
-// Render a virtual node (no content stored in JCR — useful for shared components)
+// Render a virtual node — no JCR storage, no editor interaction needed
+// Use for components that take no parameters and need no per-page configuration
 <Render content={{ nodeType: "namespace:navBar" }} />
 ```
+
+**Virtual nodes** (`content={{ nodeType }}`) render a component inline without creating a JCR node. This is the right pattern for parameterless structural components like a nav bar that is always the same on every page. Unlike `<AbsoluteArea>`, virtual nodes require zero editor interaction.
 
 > **Why `<Render node={...} />` solves the cache issue**: When you render a weakreference node via `<Render>`, its fragment is cached separately. If the referenced node changes, its fragment is invalidated and Jahia propagates that invalidation upward to any parent fragment that included it.
 
 ### `linkTypeInitializer` — rendering links
 
-`choicelist[linkTypeInitializer]` creates a link picker in the editor. The editor selects a link type, which causes Jahia to **automatically inject a mixin** onto the node:
-
-| Link type value | Mixin injected | Property provided |
-|---|---|---|
-| `"internal"` | `jmix:internalLink` | `j:linknode` — weakreference to a page/resource |
-| `"external"` | `jmix:externalLink` | `j:url` — i18n string, locale-resolved automatically |
-| `"none"` | _(nothing)_ | _(nothing)_ |
-
-> `j:linknode` and `j:url` are **never declared in your CND**. They appear at runtime when the editor picks a link type.
-
-**Two patterns depending on how you named your discriminator property:**
-
-#### Pattern A — Native Jahia property name `j:linkType`
-
-When the CND uses `- j:linkType (string, choicelist[linkTypeInitializer])`, the value is available in props directly. Use a `switch` on `props["j:linkType"]`:
+When a CND type uses `choicelist[linkTypeInitializer]`, the `j:linkType` property is a discriminator, NOT a URL. Use a `switch` statement:
 
 ```tsx
 import { buildNodeUrl, jahiaComponent } from "@jahia/javascript-modules-library";
+import type { Props } from "./types.js";
 
 jahiaComponent(
   { componentType: "view", nodeType: "namespace:callToAction" },
@@ -200,45 +237,6 @@ jahiaComponent(
 ```
 
 The `Props` type must be a discriminated union (see `jahia-dev-define-content-type` skill).
-
-#### Pattern B — Custom property name (e.g. `ctaType` from a `linkTo` mixin)
-
-When the module defines its own `linkTo` mixin with a custom property name — which is the recommended convention for project modules — use `resolveCtaHref(currentNode)`. Read from `currentNode` directly because the injected fields are not typed in `Props`:
-
-```tsx
-import { buildNodeUrl, jahiaComponent } from "@jahia/javascript-modules-library";
-import type { JCRNodeWrapper } from "org.jahia.services.content";
-
-/**
- * Resolves the CTA href from the linkTo mixin.
- * Reads ctaType (or your custom property name), then reads the injected
- * j:linknode / j:url depending on which mixin Jahia added at runtime.
- */
-function resolveCtaHref(node: JCRNodeWrapper): string {
-  if (!node.hasProperty("ctaType")) return "#";
-  const type = node.getProperty("ctaType").getString();
-  if (type === "internal" && node.hasProperty("j:linknode")) {
-    return buildNodeUrl(node.getProperty("j:linknode").getNode() as JCRNodeWrapper);
-  }
-  if (type === "external" && node.hasProperty("j:url")) {
-    // j:url is i18n — JCR session already locale-resolved
-    return node.getProperty("j:url").getString() ?? "#";
-  }
-  return "#";
-}
-
-jahiaComponent(
-  { componentType: "view", nodeType: "namespace:hero" },
-  ({ ctaLabel }: Props, { currentNode }) => {
-    const ctaHref = resolveCtaHref(currentNode);
-    return ctaHref !== "#" ? (
-      <a href={ctaHref} className="cta-button">{ctaLabel}</a>
-    ) : null;
-  },
-);
-```
-
-> See `jahia-link-patterns.md` for the full context on the `linkTo` mixin convention, GraphQL mutations, and the complete non-negotiables list.
 
 ### Cache properties — controlling fragment caching
 
@@ -274,6 +272,20 @@ jahiaComponent(
 
 > Cache only applies in **live mode**. Edit and preview modes bypass the cache entirely.
 
+> ⚠️ **`cache.perUser: "true"` freezes server-baked props at cache time.** If a fragment with `cache.perUser` contains server-rendered state that changes with navigation (e.g. "which nav item is active"), that state is computed once and served stale to all subsequent requests until the cache expires. The fix: move any dynamic state to a client-side inline script that reads from `window.location` or `data-*` attributes at runtime.
+>
+> ```tsx
+> // ❌ Server computes isActive — cached and stale on navigation
+> <a href={url} className={isActive ? styles.active : styles.link}>Nav Item</a>
+>
+> // ✅ Server stamps data-* attribute; inline script sets aria-current at runtime
+> <a href={url} className={styles.link} data-nav-path={itemPath}>Nav Item</a>
+> // In an inline <script>:
+> // document.querySelectorAll('[data-nav-path]').forEach(a => {
+> //   if (window.location.pathname.includes(a.dataset.navPath)) a.setAttribute('aria-current','page');
+> // });
+> ```
+
 ### `buildModuleFileUrl` — URL to a static module asset
 
 ```tsx
@@ -298,7 +310,7 @@ import type { JCRNodeWrapper } from "org.jahia.services.content";
 
 jahiaComponent(
   { componentType: "view", nodeType: "namespace:navBar" },
-  (_, { renderContext }) => {
+  (_, { renderContext, mainNode }) => {
     // Get all child pages of the site root
     const pages = getChildNodes(renderContext.getSite(), -1, 0,
       (node: JCRNodeWrapper) => node.isNodeType("jnt:page")
@@ -308,7 +320,12 @@ jahiaComponent(
         <ul>
           {pages.map(page => (
             <li key={page.getPath()}>
-              <a href={buildNodeUrl(page)}>{page.getDisplayableName()}</a>
+              <a
+                href={buildNodeUrl(page)}
+                aria-current={page.getPath() === mainNode.getPath() ? "page" : undefined}
+              >
+                {page.getProperty("jcr:title").getString()}
+              </a>
             </li>
           ))}
         </ul>
@@ -319,6 +336,8 @@ jahiaComponent(
 ```
 
 `getChildNodes(node, limit, offset, filterFn)` — `limit: -1` means no limit.
+
+Use `aria-current="page"` (not a CSS class) to mark the active page — it's the accessible standard and can be styled with `[aria-current="page"] { font-weight: bold }`. Compare against `mainNode.getPath()` since `===` identity comparison doesn't work across GraalJS polyglot contexts.
 
 ### `useServerContext` — access rendering context
 
@@ -345,6 +364,43 @@ jahiaComponent(
 | `bundleKey` | `string` | Module bundle key (e.g. `"my-module"`) |
 
 > Use `mainNode` to navigate to the page or site from within a sub-component. Use `jcrSession` for JCR reads that can't go through props (e.g. loading a node by path in a computed listing).
+
+---
+
+### `Java.type()` — low-level Java interop
+
+For accessing Java classes directly from JS (use only for well-known, stable APIs):
+
+```js
+const LogManager = Java.type("org.apache.logging.log4j.LogManager");
+const logger = LogManager.getLogger("MyJSLogger");
+logger.info("Hello from JS!");
+```
+
+Only use `Java.type()` with classes from Jahia's documented core. Undocumented classes may change without notice. Prefer `useServerContext()` for officially supported objects.
+
+**Mixing JS and Java modules** is fully supported — content types and services from one type can be used by the other. What does NOT work:
+- JSP files inside a JS module
+- JSX views inside a Java module
+
+---
+
+### Render filters
+
+Register a render filter from a JS module's init script to transform rendered output:
+
+```js
+registry.add("render-filter", "myFilter", renderFilterRef, {
+  target: "render:50",           // phase + priority (lower = earlier)
+  applyOnNodeTypes: "jnt:bigText",
+  prepare: (renderContext, resource, chain) => { /* setup before render */ },
+  execute: (previousOut, renderContext, resource, chain) => {
+    return previousOut.replace("foo", "bar");
+  },
+});
+```
+
+The `target` string format is `"<phase>:<priority>"`. Filters with priority < 16 run on every request; priority > 16 only on cache miss.
 
 ---
 
@@ -446,6 +502,22 @@ Combine multiple classes:
 ```tsx
 <section className={[classes.root, classes.small].join(" ")}>
 ```
+
+> ⚠️ **CSS Modules hash class names at build time.** An inline `<script>` tag cannot reference a CSS Module class by name (e.g. `document.querySelector('.active')` will never match because `.active` became `.active_abc123ef` after the build). For any element that a script needs to target, use:
+> - A `data-*` attribute as the hook: `data-nav-toggle`, `data-nav-path`, `data-qgrid`
+> - An ARIA attribute as the style target: `[aria-current="page"]`, `[aria-expanded="true"]`
+>
+> ```tsx
+> // ❌ Script can't find this class — it's been hashed
+> <button className={styles.hamburger}>Menu</button>
+> // document.querySelector('.hamburger') → null
+>
+> // ✅ Script can always find the data attribute
+> <button data-mobile-nav-toggle className={styles.hamburger}>Menu</button>
+> // document.querySelector('[data-mobile-nav-toggle]') → works
+> ```
+>
+> CSS can still use the hashed class for visual styling; only JavaScript event binding needs the `data-*` approach.
 
 ### ⚠️ CSS grid: `auto-fit` vs `auto-fill`
 
@@ -550,6 +622,8 @@ export default function Counter({ label, initialCount = 0 }: Props) {
 }
 ```
 
+> ⚠️ **Only the default export** of a `.client.tsx` file can be used as an island component. Named exports are bundled for the browser but cannot be registered as islands.
+
 > ⚠️ **Props must be serializable**: only strings, numbers, booleans, plain objects, and arrays. You cannot pass `JCRNodeWrapper`, `renderContext`, or Java objects to a client component.
 
 ### Step 2 — Wrap it with `<Island>` in the server view
@@ -581,6 +655,43 @@ If the component cannot run on the server (e.g. uses `window`, `document`, or a 
   <p>Loading map…</p>   {/* shown until the component hydrates */}
 </Island>
 ```
+
+### Step 3b — Passing children to an island (accordion pattern)
+
+In default mode (without `clientOnly`), children passed to `<Island>` are rendered on the server and inserted as static children of the island component. Use this for accordion or collapsible containers where the shell is interactive but the content is static:
+
+```tsx
+// Accordion.client.tsx
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+export default function Accordion({ children }: { children: ReactNode }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div>
+      <button type="button" onClick={() => setIsOpen(o => !o)}>
+        {isOpen ? "Close" : "Open"}
+      </button>
+      <div style={{ display: isOpen ? "block" : "none" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+```
+
+```tsx
+// default.server.tsx
+<Island component={Accordion}>
+  <p>Server-rendered static content</p>
+</Island>
+```
+
+> ⚠️ The `{children}` insertion point must always be present in the client component. If you want to hide children, use CSS — a JS condition will cause them to be omitted from the page entirely.
+
+> ⚠️ Children are wrapped in a `<jsm-children>` custom element. Avoid using the CSS `>` child combinator to target island children. Also do not target `jsm-island` or `jsm-children` in CSS — they are implementation details and may change.
+
+In `clientOnly` mode, children act as a **loading placeholder** shown until the island hydrates (see Step 3 above).
 
 ### Step 4 — Dynamic import for heavy/browser-only libraries
 
@@ -659,7 +770,53 @@ const { t } = useTranslation();
 }
 ```
 
-> Front-end UI labels (`locales/*.json`) are separate from CND editor labels (`settings/resources/*.properties`). Both are required — see [jahia-i18n-patterns.md](../../context/jahia-i18n-patterns.md) for the full distinction.
+**Best practices:**
+- Use random/opaque keys (e.g. `"r3k2"`) or scoped semantic keys (e.g. `"hero.cta.label"`) — never bare English words as keys (`"read-more"`) which creates ambiguity across contexts and forces renaming.
+- Never concatenate: always use interpolation (`{{author}}`) for dynamic data.
+- For HTML inside translations, use the `<Trans>` component instead of `t()`:
+
+```tsx
+import { Trans } from "react-i18next";
+// key value: "Written by <a>{{author}}</a>"
+<Trans i18nKey="article.byline" values={{ author }} components={{ a: <a href={authorUrl} /> }} />
+```
+
+**IDE integration:** `npm init @jahia/module@latest` automatically configures the [i18n ally](https://github.com/lokalise/i18n-ally#readme) VS Code extension. When installed it shows translation values inline in the code, lets you edit them without opening JSON files, and provides an `Extract text into i18n messages` command that replaces a hardcoded string with a `t("...")` call. Install the recommended extensions in `.vscode/extensions.json` to get it.
+
+> Front-end UI labels (`locales/*.json`) are separate from CND editor labels (`settings/resources/*.properties`). Both are required — locales for rendered UI strings, properties for the Jahia content editor.
+
+---
+
+## Step 5d — Language switcher
+
+Use the following utilities from `@jahia/javascript-modules-library` to build a server-rendered language switcher:
+
+```tsx
+import { getSiteLocales, buildNodeUrl, jahiaComponent } from "@jahia/javascript-modules-library";
+
+jahiaComponent(
+  { componentType: "view", nodeType: "ns:languageSwitcher" },
+  (_, { renderContext, currentNode }) => {
+    const locales = getSiteLocales(renderContext.getSite());
+    const invalidLanguages: string[] = currentNode.getPropertyAsString("j:invalidLanguages")?.split(" ") ?? [];
+
+    return (
+      <ul>
+        {locales
+          .filter(locale => !invalidLanguages.includes(locale))
+          .filter(locale => currentNode.hasI18N(renderContext.getSite().getLocale(locale)))
+          .map(locale => (
+            <li key={locale}>
+              <a href={buildNodeUrl(currentNode, { language: locale })}>{locale.toUpperCase()}</a>
+            </li>
+          ))}
+      </ul>
+    );
+  },
+);
+```
+
+`j:invalidLanguages` is a system property Jahia sets on nodes that haven't been translated to a given language. Filtering it out prevents dead links to untranslated pages. `node.hasI18N(locale)` provides an additional check — it returns false for nodes that have no translated properties at all for the given locale, catching cases `j:invalidLanguages` may not cover.
 
 ---
 
@@ -670,60 +827,6 @@ Build and deploy the module to push all changes (existing or new files):
 ```bash
 # Always use this — never use yarn dev from an agent (it's interactive-only)
 yarn build && yarn jahia-deploy
-```
-
----
-
-### Accessibility and SEO requirements
-
-Every public-facing view must meet WCAG 2.1 AA. Apply these rules before marking a view complete:
-
-**Heading hierarchy**
-- Page templates render the page `jcr:title` as `<h1>` — components must NEVER use `<h1>`
-- Use `<h2>` for a component's primary heading, `<h3>` for sub-items
-- Accept a `headingLevel?: 'h2' | 'h3' | 'h4'` prop for components that may appear at different nesting depths
-- Never skip heading levels (h1 → h3 is invalid; screen readers and search engines rely on hierarchy)
-
-**Image alt text**
-- Every `<img>` needs an `alt` attribute — no exceptions
-- Informative images: `alt="descriptive text"` (what the image conveys, not "image of...")
-- Decorative images: `alt=""` `aria-hidden="true"` — add a comment `{/* decorative */}`
-- Icon-only buttons: `aria-label` on the `<button>`, `alt=""` on the inner `<img>`
-- NEVER default to `jcr:title` as alt text — it is often a filename. Use a dedicated `imageAlt` CND field.
-
-**Image loading and Core Web Vitals**
-- LCP / hero images (above the fold): `loading="eager"` `fetchpriority="high"`
-- All other images: `loading="lazy"` with explicit `width` and `height` to prevent layout shift (CLS)
-- Always include `width` and `height` on every `<img>` — even approximate values prevent CLS
-
-**Focus indicators**
-- Never write `outline: none` or `outline: 0` in CSS without replacing it with a visible `:focus-visible` style
-- Minimum acceptable focus style: `outline: 2px solid currentColor; outline-offset: 2px;`
-
-**Link and button text**
-- Avoid "click here", "read more" as standalone link text
-- When a card has a repeated "Learn more" link, add `aria-label="Learn more about {title}"` for screen reader context
-- `<a>` navigates to a URL; `<button>` triggers an action — never swap them
-
-**ARIA live regions (Islands only)**
-When a client Island updates content dynamically (results, feedback, loading state), screen readers are not notified without a live region:
-```tsx
-// In the Island's render output
-<div role="status" aria-live="polite" aria-atomic="true" className={classes.srOnly}>
-  {announcement}  {/* e.g. "12 results found" — update this string when content changes */}
-</div>
-```
-```css
-/* CSS: visually hidden but readable by screen readers */
-.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-```
-
-**Reduced motion**
-Wrap all CSS transitions and animations:
-```css
-@media (prefers-reduced-motion: no-preference) {
-  .card { transition: var(--ns-transition-standard); }
-}
 ```
 
 ---
@@ -745,14 +848,21 @@ Wrap all CSS transitions and animations:
 - [ ] **If client-side**: browser-only libraries use dynamic `import()` inside `useEffect`
 - [ ] `yarn build && yarn jahia-deploy` run after all changes
 - [ ] Component renders without errors in Page Builder
-- [ ] No `<h1>` in component views — page template owns the h1
-- [ ] Every `<img>` has `alt` attribute (descriptive or `alt=""` with `aria-hidden="true"` + comment for decorative)
-- [ ] Every `<img>` has explicit `width` and `height` attributes
-- [ ] LCP/hero image has `loading="eager"` `fetchpriority="high"`; all others have `loading="lazy"`
-- [ ] No `outline: none` without a `:focus-visible` replacement
-- [ ] Interactive Islands have a `role="status"` live region for dynamic content updates
-- [ ] CSS transitions wrapped in `@media (prefers-reduced-motion: no-preference)`
-- [ ] Link text is descriptive; repeated links have `aria-label` with context
 
 ## Troubleshooting
 > https://academy.jahia.com/tutorials-get-started/front-end-developer/making-a-hero-section
+
+### JSX vs HTML attribute differences
+
+| Feature | HTML | JSX |
+|---|---|---|
+| CSS class | `class="..."` | `className="..."` |
+| Inline style | `style="color:red"` | `style={{ color: 'red' }}` |
+| Event handler | `onclick="fn()"` | `onClick={fn}` |
+| Comments | `<!-- -->` | `{/* */}` |
+| Boolean attributes | `disabled` | `disabled={true}` or just `disabled` |
+
+## References
+
+- JavaScript modules monorepo: https://github.com/Jahia/javascript-modules
+- Preparing for i18n: https://academy.jahia.com/documentation/jahia-cms/jahia-8-2/developer/javascript-module-development/preparing-for-internationalization-i18n

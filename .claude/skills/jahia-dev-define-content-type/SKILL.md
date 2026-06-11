@@ -48,6 +48,28 @@ Only proceed to the CND once this spec is agreed.
 
 **Mixins are how you share fields across multiple content types.** Whenever a set of properties appears on more than one type — a CTA block, a link, a badge, a price field — extract them into a mixin. This avoids duplication and keeps CND definitions focused.
 
+**Critical rule: if a mixin needs to store hidden child nodes, declare the child node definition in the mixin itself.** Without this, Jackrabbit throws `ConstraintViolationException: No child node definition found` when the Java action tries to call `addNode()`.
+
+```cnd
+// settings/definitions.cnd
+
+// ❌ WRONG — no child node definition; addNode("shr:likeStore") throws at runtime
+[shrMix:likeable] mixin
+
+// ✅ CORRECT — mixin declares the storage slot; any type extending it inherits it
+[shrMix:likeable] mixin
+ + shr:likeStore (shr:likeStore) = shr:likeStore version
+
+[shr:likeStore] > jnt:content, jmix:hiddenType
+ + * (shr:like) = shr:like version
+
+[shr:like] > jnt:content, jmix:hiddenType
+ - likedBy   (string) mandatory
+ - likedDate (date)
+```
+
+The child node definition (`+ childName (Type) = DefaultType version`) tells Jackrabbit which child types are valid under any node that has this mixin. Without it the mixin is a pure marker and no children can be added programmatically.
+
 The module-level `settings/definitions.cnd` defines all mixins and base types. Component-level `definition.cnd` files define the content types that extend them.
 
 **Example: reusable CTA mixin**
@@ -147,7 +169,7 @@ Check `settings/definitions.cnd` for the module's namespace declaration. It look
 <ns = 'http://www.mymodule.com/...'>
 ```
 
-The short prefix (e.g. `llmacademy`) is the namespace to use for all node types in this module.
+The short prefix (e.g. `ns`) is the namespace to use for all node types in this module.
 
 ---
 
@@ -171,43 +193,21 @@ The short prefix (e.g. `llmacademy`) is the namespace to use for all node types 
 | `weakreference, picker[type='image']` | Image picker |
 | `weakreference multiple` | List of references (e.g. links to multiple pages) |
 | `string, choicelist[linkTypeInitializer]` | Link type discriminator (internal page / external URL / none) — **special initializer, not a value list** |
-| `string, choicelist[resourceBundle]` with `< 'val1', 'val2'` constraints | Dropdown with translated labels — **always use this for fixed lists** (see below) |
+| `string, choicelist` with `< 'val1', 'val2'` constraints | Dropdown with fixed choices (see below) |
 | `date` | Date picker |
 | `boolean` | Checkbox |
 | `double` | Decimal number (e.g. latitude/longitude) |
 | `long` | Integer number |
 | `string multiple` | List of strings |
 
-### Fixed-choice dropdowns — always use `choicelist[resourceBundle]`
+### Fixed-choice dropdowns (constrained string)
 
-**Always use `(string, choicelist[resourceBundle])` for fixed-value dropdowns.** Plain `(string, choicelist)` without `[resourceBundle]` shows raw stored values (e.g. `draft`) instead of human-readable labels (e.g. `Draft`) in the content editor. **Do NOT use `choicelist[val1,val2]`** — that syntax is invalid.
+Use `(string, choicelist)` combined with value constraints (`< 'val1', 'val2'`) to render a dropdown in the editor. **Do NOT use `choicelist[val1,val2]`** — that syntax is invalid:
 
 ```cnd
-// ✅ CORRECT — editor sees "Draft", "In Review", "Published"
-- status (string, choicelist[resourceBundle]) = 'draft' autocreated i18n < 'draft', 'review', 'published'
-
-// ❌ WRONG — editor sees raw values: "draft", "review", "published"
-- status (string, choicelist) i18n < 'draft', 'review', 'published'
-```
-
-The `.properties` file keys must follow the pattern `{cnd-namespace}_{typeName}.{ns}_{propName}.{value}` — the `:` namespace separator is replaced by `_`:
-
-```properties
-# namespace_typeName.ns_propName.constraintValue=Display label
-namespace_myType.ns_status.draft=Draft
-namespace_myType.ns_status.review=In Review
-namespace_myType.ns_status.published=Published
-```
-
-Real example — `euint:alertBanner`, property `eui:level`:
-```cnd
-- eui:level (string, choicelist[resourceBundle]) mandatory < 'info', 'warning', 'error', 'success'
-```
-```properties
-euint_alertBanner.eui_level.info=Information
-euint_alertBanner.eui_level.warning=Warning
-euint_alertBanner.eui_level.error=Error
-euint_alertBanner.eui_level.success=Success
+[namespace:article] > jnt:content
+ - difficulty (string, choicelist) i18n < 'beginner', 'intermediate', 'advanced'
+ - product (string, choicelist) i18n < 'jahia', 'jexperience', 'cloud'
 ```
 
 ### Choicelist initializer variants
@@ -216,59 +216,31 @@ euint_alertBanner.eui_level.success=Success
 
 | Initializer | What editor sees |
 |---|---|
-| `choicelist[resourceBundle]` | Labels from `.properties` keys `ns_type.ns_prop.value=Label` — **default for fixed lists** |
 | `choicelist[linkTypeInitializer]` | Internal page / External URL / None link picker |
 | `choicelist[nodes=/path/to/folder;type=jnt:content]` | Picker populated from JCR nodes under a path |
 | `choicelist[componentTypes=jnt:page]` | Picker showing all registered views of a node type |
 | `choicelist[country]` | Country selector (ISO codes with localized labels) |
 | `choicelist[menus]` | Picker for existing menus defined on the site |
+| `choicelist[resourceBundle]` | Labels come from `.properties` file keys matching `ns_type.field.value` |
 
 ```cnd
-// Resource bundle labels — PREFERRED for all fixed lists
-- status (string, choicelist[resourceBundle]) = 'draft' autocreated i18n < 'draft', 'review', 'published'
-
 // Country picker — stores ISO code, shows localized country name in editor
 - country (string, choicelist[country]) i18n
 
 // Node picker — editor selects from nodes under a specific folder
 - template (string, choicelist[nodes=/sites/mySite/templates;type=jnt:content])
+
+// Component type picker — shows all views of jnt:page registered in the module
+- pageLayout (string, choicelist[componentTypes=jnt:page])
+
+// Resource bundle labels — values come from .properties keys
+- status (string, choicelist[resourceBundle]) i18n < 'draft', 'review', 'published'
+// In .properties: namespace_typeName.status.draft=Draft
+//                 namespace_typeName.status.review=In Review
+//                 namespace_typeName.status.published=Published
 ```
 
-> ⚠️ `choicelist[linkTypeInitializer]` is a **special initializer keyword** (not a value list) — see the link pattern section below.
-
-### JSON fieldset override — inline labels without `.properties`
-
-As an alternative to `choicelist[resourceBundle]`, you can embed labels directly in a JSON fieldset file. This bypasses the `.properties` system — useful for rapid prototyping or when the labels are identical in all locales (e.g. numbers, icons, technical codes).
-
-File location: `settings/content-editor-forms/fieldsets/<cnd-namespace>_<typeName>.json`
-
-```json
-{
-  "name": "namespace:myType",
-  "fields": [
-    {
-      "name": "ns:columns",
-      "selectorType": "Choicelist",
-      "selectorOptionsMap": { "allowCustomEntry": "false" },
-      "valueConstraints": [
-        { "displayValue": "1 column",  "value": { "type": "String", "value": "1" } },
-        { "displayValue": "2 columns", "value": { "type": "String", "value": "2" } },
-        { "displayValue": "3 columns", "value": { "type": "String", "value": "3" } },
-        { "displayValue": "4 columns", "value": { "type": "String", "value": "4" } }
-      ]
-    }
-  ]
-}
-```
-
-When to use each approach:
-
-| Approach | Use when |
-|---|---|
-| `choicelist[resourceBundle]` + `.properties` | Values need translated labels (EN/FR), or the list is reused across multiple types |
-| JSON `valueConstraints` | Labels are locale-independent (numbers, icon keys, codes), or you need `RadioChoiceList` / custom `selectorType` |
-
-> ⚠️ JSON `valueConstraints` override the `.properties` labels entirely — the `.properties` keys are still needed for the property label and tooltip, but the value labels come from the JSON only.
+> ⚠️ `choicelist[linkTypeInitializer]` is a **special initializer keyword** (not a value list) — see the link pattern section below. For fixed lists without dynamic labels, always use `(string, choicelist)` + `< 'val1', 'val2'`.
 
 Use `< "[-90,90]"` to restrict a numeric property to a range:
 
@@ -350,6 +322,10 @@ In the view, use a `switch` on `props["j:linkType"]` (see `jahia-dev-create-view
 
 **Default to `i18n` on every user-facing field** — titles, subtitles, body text, button labels, alt text, captions, people names. Even on monolingual sites, adding `i18n` from the start avoids costly CND migrations later.
 
+> ⚠️ **Child nodes do not support `i18n`.** The content tree is shared across all languages. If you need locale-specific child content, use per-language **visibility conditions** in the Jahia editor (Advanced Editing → Visibility → Languages) instead.
+
+> Under the hood: non-i18n fields are stored directly on the node; i18n fields are stored as properties of auto-created `jnt:translation_<language>` child nodes. You don't manage these directly, but knowing this helps when debugging missing translated values.
+
 ### Common mixins to extend
 
 | Mixin | Adds |
@@ -368,16 +344,42 @@ In the view, use a `switch` on `props["j:linkType"]` (see `jahia-dev-create-view
 - `< jmix:image` — restricts a weakreference to image nodes only
 - `< namespace:typeName` — restricts child nodes to a specific type
 
+**Regex constraints** — validate a `string` field against a pattern:
+
+```cnd
+// Email address (or empty — regex starts with ^$ to allow clearing the field)
+- contactEmail (string) < '^$|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+
+// URL-safe slug — lowercase letters, digits, hyphens only
+- slug (string) < '^[a-z0-9-]+$'
+
+// Must start with http:// or https://
+- externalUrl (string) < '^https?://'
+```
+
+**Date-range constraints** — bound a `date` field to a window. Use `(` / `)` for exclusive bounds, `[` / `]` for inclusive. Leave either side empty for open-ended:
+
+```cnd
+// Any date after 2020-01-01 (exclusive lower bound, no upper bound)
+- eventDate (date, datepicker) < '(2020-01-01T00:00:00.000,)'
+
+// From 2020 onwards inclusive (events can't be backdated before the platform launched)
+- startDate (date, datepicker) < '[2020-01-01T00:00:00.000,]'
+
+// Bounded window — exclusive on both sides
+- campaignDate (date, datepicker) < '(2020-01-01T00:00:00.000,2030-12-31T00:00:00.000)'
+```
+
 ### Example — Hero Section with CTA (link pattern)
 
 ```cnd
-[llmacademy:heroSection] > jnt:content, llmacademymix:component
+[ns:heroSection] > jnt:content, nsmix:component
  - title (string) i18n mandatory
  - subtitle (string, textarea) i18n mandatory
  - background (weakreference, picker[type='image']) mandatory < jmix:image
- + * (llmacademy:heroCallToAction)
+ + * (ns:heroCallToAction)
 
-[llmacademy:heroCallToAction] > jnt:content, llmacademymix:component
+[ns:heroCallToAction] > jnt:content, nsmix:component
  - title (string) i18n mandatory
  - j:linkType (string, choicelist[linkTypeInitializer]) mandatory
  // j:linknode and j:url are injected by Jahia — do not declare them
@@ -386,7 +388,7 @@ In the view, use a `switch` on `props["j:linkType"]` (see `jahia-dev-create-view
 ### Example — Blog Post
 
 ```cnd
-[llmacademy:blogPost] > jnt:content, mix:title, jmix:mainResource, llmacademymix:component
+[ns:blogPost] > jnt:content, mix:title, jmix:mainResource, nsmix:component
  - subtitle (string) i18n mandatory
  - authors (string) multiple
  - cover (weakreference, picker[type='image']) mandatory < jmix:image
@@ -507,9 +509,9 @@ Create a 32×32 PNG icon at:
 settings/content-types-icons/<cnd-namespace>_<typeName>.png
 ```
 
-The prefix is the **CND namespace** (e.g. `llmacademy`, `llmacademymix`), **not** the module name. For example:
-- `llmacademy_heroSection.png` ✅
-- `llm-academy_heroSection.png` ❌ (module name with hyphen — wrong)
+The prefix is the **CND namespace** (e.g. `ns`, `nsmix`), **not** the module name. For example:
+- `ns_heroSection.png` ✅
+- `my-module_heroSection.png` ❌ (module name with hyphen — wrong)
 
 You can source free icons from [flaticon.com](https://www.flaticon.com/) (download at 32px). If no icon is available, copy an existing one as a placeholder — editors will see a blank space otherwise.
 
@@ -527,9 +529,6 @@ yarn build && yarn jahia-deploy
 If Jahia rejects the type definition (e.g. breaking change), use the **Installed definitions browser** to remove the old definition first:
 > http://localhost:8080/modules/tools/definitionsBrowser.jsp
 
-If Jahia rejects the type definition (e.g. breaking change), use the **Installed definitions browser** to remove the old definition first:
-> http://localhost:8080/modules/tools/definitionsBrowser.jsp
-
 ---
 
 ## Validation checklist
@@ -539,14 +538,12 @@ If Jahia rejects the type definition (e.g. breaking change), use the **Installed
 - [ ] Uses `namespacemix:component` or `namespacemix:pageComponent` — **never** `jmix:droppableContent` directly
 - [ ] All required properties have the `mandatory` attribute
 - [ ] All user-facing string/text fields have `i18n` (default to always)
-- [ ] **All fixed-value dropdowns use `(string, choicelist[resourceBundle])` — never bare `(string, choicelist)`**
-- [ ] **Every `choicelist[resourceBundle]` constraint value has a corresponding `.properties` key in EN + FR** (`ns_type.ns_prop.value=Label`)
-- [ ] **OR** a JSON fieldset `valueConstraints` override is present in `settings/content-editor-forms/fieldsets/`
 - [ ] Structural/container types have `jmix:hiddenType` (not shown in picker) — do NOT use `jmix:studioOnly`
+- [ ] Any mixin that calls `addNode()` on a child declares `+ childName (Type) = Type version` in the mixin definition
 - [ ] `jmix:mainResource` only used for listing + detail content (not visual composition)
 - [ ] `types.ts` created with correct TypeScript types
 - [ ] Views handle null/missing values gracefully (mandatory does not guarantee a value)
-- [ ] Translation keys added to `.properties` files (EN + FR minimum), including `.ui.tooltip` for every property
+- [ ] Translation keys added to `.properties` files (EN + FR minimum)
 - [ ] Icon created at `settings/content-types-icons/<namespace>_<typeName>.png`
 - [ ] `yarn build && yarn jahia-deploy` run and type appears in Jahia content editor with correct label and icon
 

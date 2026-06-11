@@ -55,14 +55,14 @@ FROM [namespace:typeName] AS item
 WHERE ISDESCENDANTNODE(item, '/sites/<siteKey>/contents/<folderName>')
 ```
 
-Replace `<siteKey>` with the site key set during site creation (e.g. `llmacademy`).
+Replace `<siteKey>` with the site key set during site creation.
 
 ### Filter out drafts (items without a date)
 
 ```sql
 SELECT *
 FROM [namespace:blogPost] AS post
-WHERE ISDESCENDANTNODE(post, '/sites/llmacademy/contents/blog')
+WHERE ISDESCENDANTNODE(post, '/sites/<siteKey>/contents/blog')
   AND post.[publicationDate] IS NOT NULL
 ORDER BY post.[publicationDate] DESC
 ```
@@ -74,7 +74,7 @@ Use `ISDESCENDANTNODE` for nested folder structures:
 ```sql
 -- All blog posts anywhere under /contents/blog (including subfolders)
 SELECT * FROM [namespace:blogPost] AS post
-WHERE ISDESCENDANTNODE(post, '/sites/llmacademy/contents/blog')
+WHERE ISDESCENDANTNODE(post, '/sites/<siteKey>/contents/blog')
 ```
 
 Use `ISCHILDNODE` when you want only direct children of a folder:
@@ -82,8 +82,34 @@ Use `ISCHILDNODE` when you want only direct children of a folder:
 ```sql
 -- Only direct children of /contents/blog
 SELECT * FROM [namespace:blogPost] AS post
-WHERE ISCHILDNODE(post, '/sites/llmacademy/contents/blog')
+WHERE ISCHILDNODE(post, '/sites/<siteKey>/contents/blog')
 ```
+
+### Filter by weakreference (category, tag, related content)
+
+`j:defaultCategory` and other `weakreference` properties are stored internally as UUID strings. Filter against them using the UUID of the referenced node:
+
+```tsx
+// Server component: get UUID from the resolved category node
+const categoryUUID = (primaryCategory as JCRNodeWrapper).getIdentifier();
+
+// JCR-SQL2: filter by that UUID — works on single-value and multi-value weakreference properties
+const results = getNodesByJCRQuery(
+  session,
+  `SELECT * FROM [shr:article]
+   WHERE ISDESCENDANTNODE('/sites/${siteKey}')
+   AND [j:defaultCategory] = '${categoryUUID}'
+   ORDER BY [jcr:created] DESC`,
+  4,   // limit
+);
+
+// Exclude the current node from related-content queries
+const related = results
+  ?.filter((n) => n.getPath() !== currentPath)
+  .slice(0, 3);
+```
+
+This pattern powers "related articles by category", "same-tag content", or any "items in this collection" query.
 
 ### Common query clauses
 
@@ -91,7 +117,7 @@ WHERE ISCHILDNODE(post, '/sites/llmacademy/contents/blog')
 |---|---|
 | `ISDESCENDANTNODE(x, '/path')` | Filter by location in the tree |
 | `x.[prop] IS NOT NULL` | Exclude items without a property (draft filter) |
-| `x.[prop] = 'value'` | Filter by property value |
+| `x.[prop] = 'value'` | Filter by property value (also works for weakreference UUID) |
 | `ORDER BY x.[prop] DESC` | Sort descending |
 | `ORDER BY x.[prop] ASC` | Sort ascending |
 
@@ -215,7 +241,7 @@ jahiaComponent(
 For sites with multiple languages, build a language switcher by combining `getSiteLocales()` with `j:invalidLanguages` and `node.hasI18N()`. Filter out disabled or untranslated locales before generating URLs.
 
 ```tsx
-import { getSiteLocales, buildNodeUrl, useServerContext, jahiaComponent } from "@jahia/javascript-modules-library";
+import { getSiteLocales, buildNodeUrl, jahiaComponent } from "@jahia/javascript-modules-library";
 
 jahiaComponent(
   { componentType: "view", nodeType: "ns:languageSwitcher" },
@@ -266,7 +292,7 @@ const BLOG_QUERY = gql`
   query LatestPosts($path: String!) {
     jcr {
       nodeByPath(path: $path) {
-        descendants(typesFilter: { types: ["ns:blogPost"] }, fieldFilter: {
+        descendants(typesFilter: { types: ["namespace:blogPost"] }, fieldFilter: {
           filters: [{ fieldName: "publicationDate", evaluation: NOT_EMPTY }]
         }) {
           nodes {
@@ -283,7 +309,7 @@ const BLOG_QUERY = gql`
 `;
 
 jahiaComponent(
-  { componentType: "view", nodeType: "ns:blogListing" },
+  { componentType: "view", nodeType: "namespace:blogListing" },
   (_, { renderContext }) => {
     const siteKey = renderContext.getSite().getName();
     const data = useGQLQuery(BLOG_QUERY, { path: `/sites/${siteKey}/contents/blog` });
@@ -316,7 +342,6 @@ For **sidebar navigation** or **tree panels**, traverse the JCR hierarchy direct
 import { useServerContext } from "@jahia/javascript-modules-library";
 import type { JCRNodeWrapper } from "org.jahia.services.content";
 
-// Inside a server component or jahiaComponent render function:
 const { renderContext } = useServerContext();
 const folderNode = renderContext.getMainResource().getNode().getSession().getNode(
   `/sites/${siteKey}/contents/tutorials`
@@ -324,8 +349,6 @@ const folderNode = renderContext.getMainResource().getNode().getSession().getNod
 ```
 
 ### Walk up to the section root
-
-When rendering a content item that may be nested several levels deep, find its "section root" (the folder directly under `/sites/siteKey/contents/`) by walking up:
 
 ```tsx
 function findSectionRoot(node: JCRNodeWrapper): JCRNodeWrapper {
@@ -352,7 +375,7 @@ import type { JCRNodeWrapper } from "org.jahia.services.content";
 
 function renderTree(
   folder: JCRNodeWrapper,
-  contentNodeType: string,  // e.g. "namespace:docArticle"
+  contentNodeType: string,
   depth: number = 0,
 ): ReactElement | null {
   const items: Array<{ type: "folder" | "item"; node: JCRNodeWrapper }> = [];
@@ -393,17 +416,14 @@ Use `folder.getNodes()` (returns a `NodeIterator`) — call `.hasNext()` / `.nex
 
 ---
 
-- **JCR repository browser**: http://localhost:8080/modules/tools/jcrBrowser.jsp  
-  Browse the full content tree, find node paths, remove buggy nodes.
-
-- **Installed definitions browser**: http://localhost:8080/modules/tools/definitionsBrowser.jsp  
-  View and remove registered content type definitions.
+- **JCR repository browser**: http://localhost:8080/modules/tools/jcrBrowser.jsp
+- **Installed definitions browser**: http://localhost:8080/modules/tools/definitionsBrowser.jsp
 
 ---
 
 ## Validation checklist
 - [ ] Content folder exists in Jahia UI under `contents/`
-- [ ] Site key in query matches the actual site key
+- [ ] Site key in query matches the actual site key (use `renderContext.getSite().getName()` in code)
 - [ ] Query returns expected results in the built-in query component
 - [ ] `jmix:mainResource` added if items need a full-page view
 - [ ] Draft/publish filtering works correctly

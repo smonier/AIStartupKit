@@ -1,6 +1,7 @@
 ---
 name: jahia-dev-define-content-type
 description: Creates a Jahia CND content type definition from a natural language description. Use when asked to model content, create a new content type, or define node types.
+allowed-tools: Bash, Read, Write, Edit
 ---
 
 ## Overview
@@ -47,6 +48,28 @@ Only proceed to the CND once this spec is agreed.
 
 **Mixins are how you share fields across multiple content types.** Whenever a set of properties appears on more than one type — a CTA block, a link, a badge, a price field — extract them into a mixin. This avoids duplication and keeps CND definitions focused.
 
+**Critical rule: if a mixin needs to store hidden child nodes, declare the child node definition in the mixin itself.** Without this, Jackrabbit throws `ConstraintViolationException: No child node definition found` when the Java action tries to call `addNode()`.
+
+```cnd
+// settings/definitions.cnd
+
+// ❌ WRONG — no child node definition; addNode("shr:likeStore") throws at runtime
+[shrMix:likeable] mixin
+
+// ✅ CORRECT — mixin declares the storage slot; any type extending it inherits it
+[shrMix:likeable] mixin
+ + shr:likeStore (shr:likeStore) = shr:likeStore version
+
+[shr:likeStore] > jnt:content, jmix:hiddenType
+ + * (shr:like) = shr:like version
+
+[shr:like] > jnt:content, jmix:hiddenType
+ - likedBy   (string) mandatory
+ - likedDate (date)
+```
+
+The child node definition (`+ childName (Type) = DefaultType version`) tells Jackrabbit which child types are valid under any node that has this mixin. Without it the mixin is a pure marker and no children can be added programmatically.
+
 The module-level `settings/definitions.cnd` defines all mixins and base types. Component-level `definition.cnd` files define the content types that extend them.
 
 **Example: reusable CTA mixin**
@@ -77,51 +100,9 @@ The `ctaLabel`, `ctaType`, `j:linknode`, `j:url` fields are inherited and ready 
 |---|---|---|
 | `nsmix:cta` | `ctaLabel`, `ctaType` (+ injected `j:linknode`/`j:url`) | Any type with a button or link |
 | `nsmix:badge` | `badgeText`, `badgeColor` | Cards, teasers, any labelled content |
-| `nsmix:seo` | `metaTitle`, `metaDescription`, `canonicalUrl`, `ogImage`, `ogType` | Every `jmix:mainResource` type (mandatory — see rule below) |
+| `nsmix:seo` | `metaTitle`, `metaDescription`, `seoKeywords` | Any `jmix:mainResource` type |
 | `nsmix:media` | `image` (weakreference), `imageAltText`, `imageCaption` | Any type with a visual asset |
 | `nsmix:trackable` | `analyticsId`, `trackingLabel` | Any CTA or interactive element |
-
-#### `nsmix:seo` — full CND definition
-
-```cnd
-// settings/definitions.cnd — declare once, extend on every jmix:mainResource type
-[nsmix:seo] mixin
- - metaTitle (string) i18n
- - metaDescription (string, textarea) i18n
- - canonicalUrl (string) indexed=no
- - ogImage (weakreference, picker[type='image']) < jmix:image
- - ogType (string, choicelist[resourceBundle]) = 'website' autocreated < 'website', 'article', 'event', 'product'
-```
-
-Corresponding `.properties` labels:
-
-```properties
-nsmix_seo=SEO & Social
-ns_myType.metaTitle=SEO title
-ns_myType.metaTitle.ui.tooltip=<b>SEO title</b> — overrides the page title in search results.<br/>Leave blank to use the page title. Max <b>60 characters</b>.
-ns_myType.metaDescription=Meta description
-ns_myType.metaDescription.ui.tooltip=<b>Meta description</b> — shown under the title in search results.<br/>Max <b>160 characters</b>. Plain text only.
-ns_myType.canonicalUrl=Canonical URL
-ns_myType.canonicalUrl.ui.tooltip=<b>Override canonical URL</b> — use only if this content is syndicated or if a vanity URL should be the canonical. Leave blank in all other cases.
-ns_myType.ogImage=Social sharing image
-ns_myType.ogImage.ui.tooltip=<b>Open Graph image</b> — displayed when this page is shared on social media.<br/>Recommended size: <b>1200×630 px</b> (16:9). Falls back to the featured image if blank.
-ns_myType.ogType=Content type
-ns_myType.ogType.ui.tooltip=Schema.org content type for social cards. <b>article</b> for news/blog, <b>event</b> for events, <b>product</b> for e-commerce, <b>website</b> for everything else.
-```
-
-TypeScript interface:
-
-```ts
-export interface SeoProps {
-  metaTitle?: string;
-  metaDescription?: string;
-  canonicalUrl?: string;
-  ogImage?: JCRNodeWrapper;
-  ogType?: 'website' | 'article' | 'event' | 'product';
-}
-```
-
-> ⛔ **Every type extending `jmix:mainResource` MUST include `nsmix:seo` in its supertypes.** Without it, editors cannot control the page's appearance in search results and social previews. The `jahia-dev-review` skill enforces this as check W11.
 
 **Generic container — accept any droppable child:**
 
@@ -169,51 +150,14 @@ If the module uses a custom area type with `pageComponent` (see `jahia-dev-creat
 
 ---
 
-## Step 1 — Two-tier CND split (enforced convention)
+## Step 1 — Identify the component location
 
-Every Jahia JavaScript module uses a strict two-tier CND split:
+CND files can live in two places:
 
-| File | What goes here |
-|---|---|
-| `settings/definitions.cnd` | Namespace declarations (`<ns = '...'>`), shared mixins only |
-| `src/components/<Name>/definition.cnd` | One component type — nothing else |
+- **Component-level** (preferred): `src/components/<Category>/<Name>/definition.cnd`
+- **Module-level**: `settings/definitions.cnd` (for mixins and shared base types)
 
-**Rules:**
-
-- `settings/definitions.cnd` MUST contain namespace declarations and global mixins. It must NOT contain component types.
-- `src/components/<Name>/definition.cnd` MUST contain only the component type (`[ns:typeName] > ...` and its properties). It must NOT repeat namespace declarations.
-- `@jahia/vite-plugin` auto-discovers and merges ALL `*.cnd` files from `settings/` and `src/**` at build time — so namespace prefixes defined in `settings/definitions.cnd` are available in every component-level CND without re-declaration.
-
-**Good (correct split):**
-
-```cnd
-// settings/definitions.cnd
-<ns = 'http://www.jahia.org/jahia/module/ns/1.0'>
-<nsmix = 'http://www.jahia.org/jahia/module/ns/mix/1.0'>
-
-[nsmix:component] > jmix:droppableContent, jmix:accessControllableContent mixin
-[nsmix:cta] mixin
- - ctaLabel (string) i18n
- - ctaType (string, choicelist[linkTypeInitializer]) = 'none' autocreated
-```
-
-```cnd
-// src/components/Hero/definition.cnd  ← NO namespace declarations here
-[ns:hero] > jnt:content, nsmix:component, nsmix:cta
- - title (string) i18n mandatory
- - backgroundImage (weakreference, picker[type='image']) < jmix:image
-```
-
-**Common mistake to avoid:**
-
-```cnd
-// ❌ WRONG — namespace declarations do not belong in a component-level CND
-<ns = 'http://www.jahia.org/jahia/module/ns/1.0'>
-[ns:hero] > jnt:content, nsmix:component
- - title (string) i18n mandatory
-```
-
-For a new standalone component, always create `src/components/<Name>/definition.cnd` — never add it to `settings/definitions.cnd`.
+For a new standalone component, always create a component-level `definition.cnd`.
 
 ---
 
@@ -225,7 +169,7 @@ Check `settings/definitions.cnd` for the module's namespace declaration. It look
 <ns = 'http://www.mymodule.com/...'>
 ```
 
-The short prefix (e.g. `llmacademy`) is the namespace to use for all node types in this module.
+The short prefix (e.g. `ns`) is the namespace to use for all node types in this module.
 
 ---
 
@@ -378,103 +322,64 @@ In the view, use a `switch` on `props["j:linkType"]` (see `jahia-dev-create-view
 
 **Default to `i18n` on every user-facing field** — titles, subtitles, body text, button labels, alt text, captions, people names. Even on monolingual sites, adding `i18n` from the start avoids costly CND migrations later.
 
+> ⚠️ **Child nodes do not support `i18n`.** The content tree is shared across all languages. If you need locale-specific child content, use per-language **visibility conditions** in the Jahia editor (Advanced Editing → Visibility → Languages) instead.
+
+> Under the hood: non-i18n fields are stored directly on the node; i18n fields are stored as properties of auto-created `jnt:translation_<language>` child nodes. You don't manage these directly, but knowing this helps when debugging missing translated values.
+
 ### Common mixins to extend
 
 | Mixin | Adds |
 |---|---|
 | `jnt:content` | Base type for all user content (always include) |
-| `mix:title` | Adds `jcr:title` (i18n string) — **include on every content type** (see rule below) |
 | `namespacemix:component` | Makes this type available as a droppable component in Page Builder |
+| `mix:title` | Adds a `jcr:title` field |
 | `jmix:mainResource` | Makes the node accessible at its own URL — use only for content that needs **both a listing card AND a full detail page** (e.g. blog posts). Do not add to navigation-only or visual composition types. |
 | `jmix:hiddenType` | Hides a type from the Page Builder component picker (use for structural/container nodes editors should not add manually). Prefer over `jmix:studioOnly` which can cause silent rendering issues. |
 | `jmix:accessControllableContent` | Enables per-component access control in jcontent — add to the base module mixin |
 | `jmix:image` | Constraint: only image nodes |
 | `jmix:link` | Built-in link type |
 
-### `mix:title` rule — apply to every content type
-
-**Always add `mix:title` to all content types extending `jnt:content`, `jmix:editorialContent`, or `jmix:mainResource`.** Never declare a custom `title (string) i18n` or `"jcr:title" (string) i18n` property — `mix:title` already provides `jcr:title`.
-
-Why this matters:
-
-| Benefit | Detail |
-|---|---|
-| Node display name | jContent uses `jcr:title` as the label in the content tree |
-| SEO page title | For `jmix:mainResource` nodes, the main template uses `jcr:title` for the HTML `<title>` tag automatically |
-| Standard label | Jahia provides a built-in "Title" label — no properties file entry needed unless you want a custom label |
-| No duplicate field | A custom `title` field alongside `mix:title` forces editors to fill in two identical fields |
-
-```cnd
-// ✅ CORRECT — mix:title provides jcr:title
-[ns:blogPost] > jnt:content, mix:title, jmix:mainResource, nsmix:component
- - subtitle (string, textarea) i18n
-
-// ❌ WRONG — duplicate custom title field
-[ns:blogPost] > jnt:content, jmix:mainResource, nsmix:component
- - title (string) i18n mandatory        // ← redundant; use mix:title instead
- - subtitle (string, textarea) i18n
-
-// ❌ ALSO WRONG — manually declaring jcr:title
-[ns:section] > jnt:content, nsmix:component
- - "jcr:title" (string) i18n            // ← mix:title provides this; don't repeat it
-```
-
-In your TypeScript `types.ts`, reference the property as `"jcr:title"?:`:
-
-```ts
-export interface Props {
-  "jcr:title"?: string;   // from mix:title — always optional (even if filled in practice)
-  subtitle?: string;
-}
-```
-
-In a server view, destructure with an alias so the rest of the code uses a clean variable name:
-
-```tsx
-jahiaComponent(..., ({ "jcr:title": title, subtitle }: Props, { currentNode }) => {
-  const displayTitle = title ?? currentNode.getName(); // always have a fallback
-  return <h1>{displayTitle}</h1>;
-});
-```
-
-Override the default "Title" label in `.properties` when the context warrants it:
-
-```properties
-# Default Jahia label is "Title" — override only when more specific is clearer
-ns_blogPost.jcr:title=Article title
-ns_blogPost.jcr:title.ui.tooltip=<b>Article title</b> — shown in listings and as the page title.<br/>Max 120 characters.
-```
-
-### Image field — always pair with a dedicated alt field
-
-Always pair an image field with a dedicated `imageAlt (string) i18n` field. NEVER use `jcr:title` as a default alt text — it is often a filename or technical string. In views, use `imageAlt ?? ""` with a code comment `/* decorative if no alt provided */`. For informative images where alt is mandatory, declare `imageAlt (string) mandatory i18n`.
-
-```cnd
-[ns:card] > jnt:content, nsmix:component
- - thumbnail (weakreference, picker[type='image']) < jmix:image
- - imageAlt (string) i18n   // ← always paired with the image field
-```
-
-```tsx
-// In the view:
-<img src={buildNodeUrl(thumbnail)} alt={imageAlt ?? ""} /* decorative if no alt provided */ />
-```
-
 ### Constraints
 
 - `< jmix:image` — restricts a weakreference to image nodes only
 - `< namespace:typeName` — restricts child nodes to a specific type
 
+**Regex constraints** — validate a `string` field against a pattern:
+
+```cnd
+// Email address (or empty — regex starts with ^$ to allow clearing the field)
+- contactEmail (string) < '^$|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+
+// URL-safe slug — lowercase letters, digits, hyphens only
+- slug (string) < '^[a-z0-9-]+$'
+
+// Must start with http:// or https://
+- externalUrl (string) < '^https?://'
+```
+
+**Date-range constraints** — bound a `date` field to a window. Use `(` / `)` for exclusive bounds, `[` / `]` for inclusive. Leave either side empty for open-ended:
+
+```cnd
+// Any date after 2020-01-01 (exclusive lower bound, no upper bound)
+- eventDate (date, datepicker) < '(2020-01-01T00:00:00.000,)'
+
+// From 2020 onwards inclusive (events can't be backdated before the platform launched)
+- startDate (date, datepicker) < '[2020-01-01T00:00:00.000,]'
+
+// Bounded window — exclusive on both sides
+- campaignDate (date, datepicker) < '(2020-01-01T00:00:00.000,2030-12-31T00:00:00.000)'
+```
+
 ### Example — Hero Section with CTA (link pattern)
 
 ```cnd
-[llmacademy:heroSection] > jnt:content, llmacademymix:component
+[ns:heroSection] > jnt:content, nsmix:component
  - title (string) i18n mandatory
  - subtitle (string, textarea) i18n mandatory
  - background (weakreference, picker[type='image']) mandatory < jmix:image
- + * (llmacademy:heroCallToAction)
+ + * (ns:heroCallToAction)
 
-[llmacademy:heroCallToAction] > jnt:content, llmacademymix:component
+[ns:heroCallToAction] > jnt:content, nsmix:component
  - title (string) i18n mandatory
  - j:linkType (string, choicelist[linkTypeInitializer]) mandatory
  // j:linknode and j:url are injected by Jahia — do not declare them
@@ -483,7 +388,7 @@ Always pair an image field with a dedicated `imageAlt (string) i18n` field. NEVE
 ### Example — Blog Post
 
 ```cnd
-[llmacademy:blogPost] > jnt:content, mix:title, jmix:mainResource, llmacademymix:component
+[ns:blogPost] > jnt:content, mix:title, jmix:mainResource, nsmix:component
  - subtitle (string) i18n mandatory
  - authors (string) multiple
  - cover (weakreference, picker[type='image']) mandatory < jmix:image
@@ -604,9 +509,9 @@ Create a 32×32 PNG icon at:
 settings/content-types-icons/<cnd-namespace>_<typeName>.png
 ```
 
-The prefix is the **CND namespace** (e.g. `llmacademy`, `llmacademymix`), **not** the module name. For example:
-- `llmacademy_heroSection.png` ✅
-- `llm-academy_heroSection.png` ❌ (module name with hyphen — wrong)
+The prefix is the **CND namespace** (e.g. `ns`, `nsmix`), **not** the module name. For example:
+- `ns_heroSection.png` ✅
+- `my-module_heroSection.png` ❌ (module name with hyphen — wrong)
 
 You can source free icons from [flaticon.com](https://www.flaticon.com/) (download at 32px). If no icon is available, copy an existing one as a placeholder — editors will see a blank space otherwise.
 
@@ -624,25 +529,18 @@ yarn build && yarn jahia-deploy
 If Jahia rejects the type definition (e.g. breaking change), use the **Installed definitions browser** to remove the old definition first:
 > http://localhost:8080/modules/tools/definitionsBrowser.jsp
 
-If Jahia rejects the type definition (e.g. breaking change), use the **Installed definitions browser** to remove the old definition first:
-> http://localhost:8080/modules/tools/definitionsBrowser.jsp
-
 ---
 
 ## Validation checklist
 - [ ] Spec confirmed before writing CND (name, fields, views, usage)
-- [ ] Component type is in `src/components/<Name>/definition.cnd` — NOT in `settings/definitions.cnd`
-- [ ] `src/components/<Name>/definition.cnd` has NO namespace declarations (they live in `settings/definitions.cnd`)
 - [ ] Namespace matches the module (check `settings/definitions.cnd`)
 - [ ] Extends `jnt:content` and appropriate mixins
-- [ ] Includes `mix:title` in supertypes — **never** declare a custom `title` or `"jcr:title"` property
 - [ ] Uses `namespacemix:component` or `namespacemix:pageComponent` — **never** `jmix:droppableContent` directly
 - [ ] All required properties have the `mandatory` attribute
 - [ ] All user-facing string/text fields have `i18n` (default to always)
 - [ ] Structural/container types have `jmix:hiddenType` (not shown in picker) — do NOT use `jmix:studioOnly`
+- [ ] Any mixin that calls `addNode()` on a child declares `+ childName (Type) = Type version` in the mixin definition
 - [ ] `jmix:mainResource` only used for listing + detail content (not visual composition)
-- [ ] Every `jmix:mainResource` type includes `nsmix:seo` in its supertypes (check W11)
-- [ ] Image fields have a paired `imageAlt (string) i18n` field — never use `jcr:title` as alt text
 - [ ] `types.ts` created with correct TypeScript types
 - [ ] Views handle null/missing values gracefully (mandatory does not guarantee a value)
 - [ ] Translation keys added to `.properties` files (EN + FR minimum)

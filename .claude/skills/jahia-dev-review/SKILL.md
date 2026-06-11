@@ -27,6 +27,7 @@ find src/ -name "definition.cnd" | sort
 find src/ -name "*.server.tsx" | sort
 find src/ -name "*.client.tsx" | sort
 find src/ -name "types.ts" | sort
+find src/templates/ -name "*.server.tsx" | sort
 cat settings/definitions.cnd
 ```
 
@@ -65,6 +66,10 @@ Fix: move server-side logic to the `.server.tsx` wrapper and pass results as ser
 **C7 — Cache explicitly disabled (`cache.expiration="0"`)**
 Check: any `jahiaComponent` call with `properties: { "cache.expiration": "0" }`.
 Fix: never set expiration to 0. If truly fresh data is needed, use a small value like `"5"` (5 seconds) to still protect under load.
+
+**C9 — Mixin stores hidden child nodes but declares no child node definition**
+Check: any mixin in `settings/definitions.cnd` that is paired with a `jmix:hiddenType` node for data storage (e.g. a `*Store` or `*Data` type), but does not declare `+ childName (Type) = Type version` in the mixin body.
+Fix: add `+ storageNodeName (storageType) = storageType version` to the mixin. Without this, `session.addNode("storageNodeName", "storageType")` throws `ConstraintViolationException: No child node definition found` at runtime regardless of whether the parent type extends the mixin.
 
 **C8 — Generic area type used for every Area**
 Check: page templates where every `<Area>` uses the same generic area type (e.g. `nodeType="namespace:pageArea"` everywhere). This means editors see ALL `pageComponent` types as droppable options in every area — a hero section will appear as an option in a feature card grid.
@@ -114,6 +119,24 @@ Fix: add an `import.xml` with a homepage node (`j:isHomePage="true"`). Also add 
 Check: CND types that extend anything other than `jnt:content`, `jnt:page`, `jmix:*`, or standard Jahia base types.
 Fix: extend only `jnt:content` (or `jnt:page` for page types). To add fields to a type you don't control, use a mixin with `extends=<targetType>`. Unusual inheritance chains break edition interfaces in unpredictable ways.
 
+**W10 — i18n locale files out of sync**
+Check: flatten all three locale JSON files (`fr.json`, `en.json`, `es.json`) to dot-separated key lists and diff them. Any key present in one file but missing from another will break at runtime for visitors using that language.
+```bash
+# Quick sync check — list keys present in fr but missing from en/es
+node -e "
+  const fs = require('fs');
+  const flatten = (obj, prefix='') => Object.keys(obj).flatMap(k =>
+    typeof obj[k] === 'object' ? flatten(obj[k], prefix+k+'.') : [prefix+k]);
+  const fr = flatten(JSON.parse(fs.readFileSync('settings/locales/fr.json')));
+  const en = flatten(JSON.parse(fs.readFileSync('settings/locales/en.json')));
+  const es = flatten(JSON.parse(fs.readFileSync('settings/locales/es.json')));
+  const missing = k => fr.filter(k2 => !k.includes(k2));
+  if(missing(en).length) console.log('Missing from en:', missing(en).join(', '));
+  if(missing(es).length) console.log('Missing from es:', missing(es).join(', '));
+"
+```
+Fix: add the missing keys with translations before shipping.
+
 **W9 — Hardcoded link URLs in views**
 Check: any `.server.tsx`, `.client.tsx`, or template file containing a literal `href="http`, `href="/"`, or `href="/en/` (except in edit-mode chrome helpers). Also flag plain string `src="http` for non-bundled assets. Also flag any content data with `j:linkType: "external"` pointing to a path that looks like an internal Jahia URL (e.g. `/sites/`, `/cms/`, `/en/`).
 Fix: **All navigable URLs must come from contributed content.** Use `j:linkType`/`j:linknode`/`j:url` props for editorial links, `buildNodeUrl(node)` for JCR node links.
@@ -131,35 +154,49 @@ Fix: use semantic HTML for better accessibility and SEO.
 Check: `<img>` tags with `alt=""` or no `alt` attribute (unless there's a comment saying it's decorative).
 Fix: add descriptive alt text. Decorative images should have `alt=""` with a comment.
 
-**S3 — Types using `any`**
+**S3 — Accessibility violations (axe-core audit)**
+Check: run `/jahia-dev-accessibility` against all live pages. A clean module has zero `critical` or `serious` violations.
+Common issues in Jahia modules:
+- `color-contrast`: hardcoded colours with insufficient contrast ratio — check with https://webaim.org/resources/contrastchecker/
+- `image-alt`: `<img>` missing a meaningful `alt` prop sourced from CND
+- `button-name`: icon-only `<button>` or `<a>` without `aria-label`
+- `landmark-one-main`: page template missing a `<main>` wrapper
+- `page-has-heading-one`: no `<h1>` rendered on any page
+- `heading-order`: skipped heading levels between components (e.g. h1 → h3)
+- `html-has-lang`: template not setting `lang` via `useServerContext().currentLanguage`
+- `focus-visible` suppressed: global `* { outline: none }` in CSS kills keyboard navigation
+
+Fix: identify each violating component by matching the axe target selector to a `.server.tsx` file, apply the fix, rebuild, and re-run the audit.
+
+**S4 — Types using `any`**
 Check: `types.ts` files or view files using TypeScript `any`.
 Fix: use `JCRNodeWrapper` for node references, `string` / `number` / `boolean` for primitives.
 
-**S4 — Bare `<Area>` without a `nodeType`**
+**S5 — Bare `<Area>` without a `nodeType`**
 Check: page templates using `<Area name="..." />` without a `nodeType` prop.
 Fix: create a custom area type with `jmix:list`, `jmix:hiddenType`, and `orderable`, and reference it with `nodeType="namespace:areaType"`.
 
-**S5 — `mix:title` inherited but `jcr:title` not in `types.ts`**
+**S6 — `mix:title` inherited but `jcr:title` not in `types.ts`**
 Check: CND types that extend `mix:title` but whose `types.ts` doesn't include `"jcr:title": string`.
-Fix: add `"jcr:title": string` to the Props type.
+Fix: add `"jcr:title"?: string` to the Props type.
 
-**S6 — Missing `.properties` file entries or icon for new content types**
-Check: for each node type found in `definition.cnd` files, verify that `settings/resources/<module>.properties` has a label (`cndNamespace_typeName=...`) and a corresponding icon exists at `settings/content-types-icons/<cndNamespace>_<typeName>.png`. The prefix must be the CND namespace (e.g. `llmacademy_heroSection.png`), **not** the module name with hyphens (e.g. `llm-academy_heroSection.png` is wrong — the archetype generates wrong names that must be manually corrected).
+**S7 — Missing `.properties` file entries or icon for new content types**
+Check: for each node type found in `definition.cnd` files, verify that `settings/resources/<module>.properties` has a label (`cndNamespace_typeName=...`) and a corresponding icon exists at `settings/content-types-icons/<cndNamespace>_<typeName>.png`. The prefix must be the CND namespace (e.g. `ns_heroSection.png`), **not** the module name with hyphens (e.g. `my-module_heroSection.png` is wrong — the archetype generates wrong names that must be manually corrected).
 Fix: add labels (and optionally `ui.tooltip` for fields) to the properties files. Rename any icons that use the module name with hyphens to use the CND namespace. Create a 32×32 PNG icon (free source: [flaticon.com](https://www.flaticon.com/)). Without these, editors see raw technical names and blank icon squares in the content picker.
 
-**S7 — Hardcoded user-visible strings in views**
+**S8 — Hardcoded user-visible strings in views**
 Check: `.server.tsx` / `.client.tsx` files with JSX string literals that are not coming from props or i18n functions (e.g. `<p>Learn more</p>`, `<button>Submit</button>`).
-Fix: move UI labels to i18n properties files and resolve them at render time, or make them configurable through CND properties. Hardcoded strings break multilingual sites.
+Fix: move UI labels to `settings/locales/en.json` and `fr.json` and resolve them with `useTranslation()`. Hardcoded strings break multilingual sites.
 
-**S8 — Content list queries not using `ISDESCENDANTNODE` (non-recursive)**
+**S9 — Content list queries not using `ISDESCENDANTNODE` (non-recursive)**
 Check: JCR-SQL2 queries using `jcr:path LIKE '/sites/.../content/%'` or a fixed path to limit results, instead of `ISDESCENDANTNODE(node, '/sites/.../content')`.
 Fix: use `ISDESCENDANTNODE` to ensure queries work correctly even if editors reorganize content into sub-folders.
 
-**S9 — No escape hatch when using a custom component mixin**
+**S10 — No escape hatch when using a custom component mixin**
 Check: a custom section type that restricts children to a custom mixin (e.g. `+ * (namespacemix:component)`) but the module provides no "content stack" escape hatch type that itself accepts `jmix:droppableContent`.
 Fix: add a `namespace:contentStack > jnt:content, namespacemix:component + * (jmix:droppableContent)` type so power editors can still add arbitrary content when needed.
 
-**S10 — Scaffold/boilerplate components still present**
+**S11 — Scaffold/boilerplate components still present**
 Check: components under `src/components/Hello/` (or any other archetype-generated boilerplate) that are no longer referenced in `settings/import.xml` and no longer used by any view or page template.
 ```bash
 # Check if Hello components are still referenced anywhere
@@ -178,7 +215,7 @@ Format the output as:
 
 ### 🔴 Critical (N issues)
 [C1] src/components/Hero/Section/definition.cnd — `jmix:droppableContent` used directly
-     Fix: extend `llmacademymix:component` instead
+     Fix: extend `namespacemix:component` instead
 
 ### 🟡 Warnings (N issues)
 ...
