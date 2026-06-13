@@ -1,8 +1,6 @@
 ---
 name: jahia-osgi-ui-extension
 description: Conventions and patterns for building Jahia OSGi UI extensions — modules that extend the jcontent back-office (actions, panels, dialogs) using React 18, Webpack/Module Federation, and the @jahia/ui-extender registry. Distinct from JS template sets (React 19, Vite).
-allowed-tools: Bash, Read, Write, Edit
-context: fork
 ---
 
 # SKILL — Jahia OSGi UI Extension
@@ -263,13 +261,39 @@ Common targets:
 
 ### Action component pattern
 
+Every action component **must** call `useNodeChecks` and return `null` when `checksResult` is falsy. This is what controls visibility — jContent does not hide the action for you.
+
+**Minimal pattern** — module-scoped action with no node-type filtering:
+
 ```jsx
 // src/javascript/MyAction/MyAction.jsx
 import React from 'react';
-import { Language } from '@jahia/moonstone';
 import { useNodeChecks } from '@jahia/data-helper';
 
-export const MyAction = ({ path, render: Render, ...otherProps }) => {
+export const MyAction = ({ path, render: Render, ...rest }) => {
+    const { checksResult } = useNodeChecks(
+        { path },
+        { requireModuleInstalledOnSite: ['my-module'] }  // hides on sites where module is not installed
+    );
+
+    if (!checksResult) return null;
+
+    return <Render {...rest} onClick={handleClick} />;
+};
+```
+
+**Full pattern** — with node-type guards, permissions, and a drawer opened via portal:
+
+```jsx
+import React, { useState } from 'react';
+import ReactDOM from 'react-dom';
+import { Language } from '@jahia/moonstone';  // include Language only when language-aware checks are needed
+import { useNodeChecks } from '@jahia/data-helper';
+import { MyDrawer } from './MyDrawer';
+
+export const MyAction = ({ path, render: Render, ...rest }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
     const { checksResult } = useNodeChecks({ path, Language }, {
         showOnNodeTypes: ['jnt:page'],
         hideOnNodeTypes: ['jmix:someExcludedMixin'],
@@ -278,35 +302,35 @@ export const MyAction = ({ path, render: Render, ...otherProps }) => {
         requireModuleInstalledOnSite: ['my-module'],
     });
 
-    if (Render && checksResult) {
-        return <Render {...otherProps} onClick={handleClick} />;
-    }
+    if (!checksResult) return null;
 
-    return null;
+    return (
+        <>
+            <Render {...rest} onClick={() => setIsOpen(true)} />
+            {ReactDOM.createPortal(
+                <MyDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />,
+                document.body
+            )}
+        </>
+    );
 };
 ```
+
+> `Language` is only needed in the first argument when the check must be language-aware (e.g. `requiredPermission` that varies by locale). Omit it for module-scoped checks with no language dependency.
 
 `useNodeChecks` returns `checksResult: true` only when all declared conditions pass. When `false`, the action is hidden from the UI.
 
 > ⚠️ **Always include `requireModuleInstalledOnSite`** — without it, the action appears on every Jahia site regardless of whether the module is installed there. This is the primary guard that scopes a UI extension to sites where it is relevant.
-
-The render guard pattern is:
-```jsx
-if (Render && checksResult) {
-    return <Render {...otherProps} onClick={handleClick} />;
-}
-return null;
-```
 
 ### `useNodeChecks` — full options
 
 All options are optional. An action is visible only when all provided conditions pass.
 
 ```jsx
-import { Language } from '@jahia/moonstone';
 import { useNodeChecks } from '@jahia/data-helper';
+// Add Language from @jahia/moonstone to the first arg only if language-aware checks are needed
 
-const { checksResult } = useNodeChecks({ path, Language }, {
+const { checksResult } = useNodeChecks({ path }, {
   // Node type filters
   showOnNodeTypes: ['jnt:page', 'jnt:file'],       // show only on these types
   hideOnNodeTypes: ['jmix:externalLink'],           // hide on these types (both can coexist)
@@ -324,24 +348,121 @@ const { checksResult } = useNodeChecks({ path, Language }, {
 
   // Other
   hideOnExternal: true,                             // hide if the node is an external link
-
-  // Transform the result (e.g. merge with other checks)
-  mapResults: (results) => results.every(Boolean),  // default is true when all checks pass
 });
 ```
 
-Typical pattern for an action that targets pages with write permission:
+---
 
-```jsx
-const { checksResult } = useNodeChecks({ path, Language }, {
-  showOnNodeTypes: ['jnt:page'],
-  requiredPermission: ['jcr:write'],
-  requireModuleInstalledOnSite: ['my-module'],   // always include — scopes to sites where the module is active
-});
-if (Render && checksResult) {
-    return <Render {...otherProps} onClick={handleClick} />;
+## GraphQL data fetching
+
+### The golden rule: never use axios
+
+In a jcontent UI extension, **all GraphQL calls must go through the Apollo client — never axios, fetch, or any custom HTTP helper.**
+
+`@apollo/client` is declared as a **shared Module Federation singleton** by `@jahia/webpack-config`. This means your extension resolves the exact same Apollo client instance that jcontent itself uses. That client is already configured with:
+- Endpoint: `/modules/graphql`
+- Auth: session-cookie (the editor's existing jcontent session — no credentials needed)
+- Cache and error policies pre-configured
+
+### Two contexts, two patterns
+
+#### 1. Inside an adminRoute panel (most common)
+
+Components rendered via `registry.add('adminRoute', ...)` are mounted **inside** jcontent's React tree. Apollo's context is already provided by jcontent's `ApolloProvider`. Use hooks directly — no setup required:
+
+```javascript
+import {gql} from '@apollo/client';
+import {useQuery, useLazyQuery, useApolloClient} from '@apollo/client';
+
+// Define queries as static gql tags (not functions — Apollo needs static AST nodes)
+const MY_QUERY = gql`
+    query MyQuery($siteKey: String!) {
+        jcr(workspace: LIVE) {
+            nodesByCriteria(criteria: {
+                nodeType: "my:type"
+                paths: ["/sites/$siteKey"]
+                pathType: ANCESTOR
+            }) {
+                nodes { uuid path displayName(language: "en") }
+            }
+        }
+    }
+`;
+
+// ✅ Correct — useQuery resolves against jcontent's shared Apollo client
+const MyPanel = () => {
+    const siteKey = window.contextJsParameters?.siteKey || '';
+
+    const {data, loading, error} = useQuery(MY_QUERY, {
+        variables: {siteKey},
+        skip: !siteKey
+    });
+
+    const nodes = data?.jcr?.nodesByCriteria?.nodes || [];
+    // ...
+};
+```
+
+For one-shot imperative calls (e.g. export, confirm-then-fetch), use `useApolloClient`:
+
+```javascript
+const client = useApolloClient();
+
+const handleExport = async () => {
+    const result = await client.query({
+        query: MY_QUERY,
+        variables: {siteKey, limit: 9999, offset: 0},
+        fetchPolicy: 'network-only'   // bypass cache for fresh export data
+    });
+    const nodes = result.data?.jcr?.nodesByCriteria?.nodes || [];
+    // ... generate CSV/JSON blob
+};
+```
+
+#### 2. Inside a dialog rendered in a portal (outside jcontent's tree)
+
+Dialog managers use `ReactDOM.createRoot` on a detached DOM node — **outside** jcontent's React tree — so the Apollo context is not inherited. You must wrap with `ApolloProvider` and pass the client explicitly:
+
+```javascript
+import {ApolloProvider} from '@apollo/client';
+
+// The apolloClient is received from the action's context (passed by jcontent)
+open({path, language, apolloClient}) {
+    this.root.render(
+        <ApolloProvider client={apolloClient}>
+            <I18nextProvider i18n={i18next}>
+                <MyDialog path={path} language={language} onClose={() => this.close()} />
+            </I18nextProvider>
+        </ApolloProvider>
+    );
 }
-return null;
+```
+
+Inside `MyDialog`, `useQuery` / `useApolloClient` work normally because `ApolloProvider` is now in the tree.
+
+### Query authoring rules
+
+- Always use **static `gql` tagged templates** — never build query strings dynamically or as functions. Apollo's cache keys on the AST document, not a string.
+- Use **parameterized variables** (`$paths: [String]`) instead of interpolating values into the query string. This enables static `gql` tags and Apollo caching.
+- For LIVE workspace data (UGC — survey responses, comments, etc.), use `jcr(workspace: LIVE)`.
+- For editorial content (pages, components), use `jcr` (defaults to `default` workspace).
+- Use `nodesByCriteria` with `$paths` over `nodesByQuery` with interpolated SQL2 — it's safer and properly parameterized.
+
+### Anti-patterns — never do these
+
+```javascript
+// ❌ Never — axios has no session auth and is not the shared client
+import axios from 'axios';
+const data = await axios.post('/modules/graphql', {query, variables});
+
+// ❌ Never — fetch bypasses Apollo cache and CSRF guard
+const res = await fetch('/modules/graphql', {method: 'POST', body: JSON.stringify({query})});
+
+// ❌ Never — dynamic query strings break Apollo caching
+const buildQuery = (siteKey) => `query { jcr { nodesByQuery(query: "... WHERE ... '${siteKey}'") { ... } } }`;
+
+// ❌ Never — useQuery inside a portal without ApolloProvider (context missing)
+// DialogManager.open() → renders outside jcontent tree → useQuery will throw
 ```
 
 ---

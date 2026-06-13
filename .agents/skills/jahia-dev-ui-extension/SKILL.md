@@ -1,5 +1,5 @@
 ---
-name: jahia-osgi-ui-extension
+name: jahia-dev-ui-extension
 description: Conventions and patterns for building Jahia OSGi UI extensions — modules that extend the jcontent back-office (actions, panels, dialogs) using React 18, Webpack/Module Federation, and the @jahia/ui-extender registry. Distinct from JS template sets (React 19, Vite).
 ---
 
@@ -231,7 +231,7 @@ export default async function () {
 
 The `jahiaApp-init:N` priority controls load order. Use 50 for normal modules; use lower numbers only if another module must see your registry entries at init time.
 
-> **SelectorType registration** uses the same `registry.add` mechanism — `registry.add('selectorType', 'MyKey', { cmp, dataType, adaptValue, initValue })` — wired to a CND property via a JSON fieldset override in `settings/content-editor-forms/fieldsets/`. Full pattern: [context/jahia-selectortype-pattern.md](../../context/jahia-selectortype-pattern.md)
+> **SelectorType registration** uses the same `registry.add` mechanism — `registry.add('selectorType', 'MyKey', { cmp, dataType, adaptValue, initValue })` — wired to a CND property via a JSON fieldset override in `settings/content-editor-forms/fieldsets/`.
 
 ### Action registration
 
@@ -327,142 +327,16 @@ export const MyAction = ({ path, render: Render, ...rest }) => {
 All options are optional. An action is visible only when all provided conditions pass.
 
 ```jsx
-import { useNodeChecks } from '@jahia/data-helper';
-// Add Language from @jahia/moonstone to the first arg only if language-aware checks are needed
-
-const { checksResult } = useNodeChecks({ path }, {
-  // Node type filters
-  showOnNodeTypes: ['jnt:page', 'jnt:file'],       // show only on these types
-  hideOnNodeTypes: ['jmix:externalLink'],           // hide on these types (both can coexist)
-
-  // Permission checks (checked on the node) — always use arrays
-  requiredPermission: ['jcr:write'],               // array of permission names
-  requiredSitePermission: 'adminTemplates',         // checked on the site root
-
-  // Module installation check — always include this; scopes the action to sites where the module is installed
-  requireModuleInstalledOnSite: ['my-module'],     // array of module keys
-
-  // Path-based filters (regex strings supported)
-  showForPaths: ['/sites/mySite/home'],             // show only under these paths
-  hideForPaths: ['^/sites/((?!/).)+/Drafts/?$'],   // hide under these paths (regex)
-
-  // Other
-  hideOnExternal: true,                             // hide if the node is an external link
+const { checksResult } = useNodeChecks({ path }, {  // add Language to first arg only if needed
+  showOnNodeTypes: ['jnt:page', 'jnt:file'],
+  hideOnNodeTypes: ['jmix:externalLink'],
+  requiredPermission: ['jcr:write'],               // always use arrays
+  requiredSitePermission: 'adminTemplates',
+  requireModuleInstalledOnSite: ['my-module'],     // always include — scopes to active sites
+  showForPaths: ['/sites/mySite/home'],
+  hideForPaths: ['^/sites/((?!/).)+/Drafts/?$'],   // regex supported
+  hideOnExternal: true,
 });
-```
-
----
-
-## GraphQL data fetching
-
-### The golden rule: never use axios
-
-In a jcontent UI extension, **all GraphQL calls must go through the Apollo client — never axios, fetch, or any custom HTTP helper.**
-
-`@apollo/client` is declared as a **shared Module Federation singleton** by `@jahia/webpack-config`. This means your extension resolves the exact same Apollo client instance that jcontent itself uses. That client is already configured with:
-- Endpoint: `/modules/graphql`
-- Auth: session-cookie (the editor's existing jcontent session — no credentials needed)
-- Cache and error policies pre-configured
-
-### Two contexts, two patterns
-
-#### 1. Inside an adminRoute panel (most common)
-
-Components rendered via `registry.add('adminRoute', ...)` are mounted **inside** jcontent's React tree. Apollo's context is already provided by jcontent's `ApolloProvider`. Use hooks directly — no setup required:
-
-```javascript
-import {gql} from '@apollo/client';
-import {useQuery, useLazyQuery, useApolloClient} from '@apollo/client';
-
-// Define queries as static gql tags (not functions — Apollo needs static AST nodes)
-const MY_QUERY = gql`
-    query MyQuery($siteKey: String!) {
-        jcr(workspace: LIVE) {
-            nodesByCriteria(criteria: {
-                nodeType: "my:type"
-                paths: ["/sites/$siteKey"]
-                pathType: ANCESTOR
-            }) {
-                nodes { uuid path displayName(language: "en") }
-            }
-        }
-    }
-`;
-
-// ✅ Correct — useQuery resolves against jcontent's shared Apollo client
-const MyPanel = () => {
-    const siteKey = window.contextJsParameters?.siteKey || '';
-
-    const {data, loading, error} = useQuery(MY_QUERY, {
-        variables: {siteKey},
-        skip: !siteKey
-    });
-
-    const nodes = data?.jcr?.nodesByCriteria?.nodes || [];
-    // ...
-};
-```
-
-For one-shot imperative calls (e.g. export, confirm-then-fetch), use `useApolloClient`:
-
-```javascript
-const client = useApolloClient();
-
-const handleExport = async () => {
-    const result = await client.query({
-        query: MY_QUERY,
-        variables: {siteKey, limit: 9999, offset: 0},
-        fetchPolicy: 'network-only'   // bypass cache for fresh export data
-    });
-    const nodes = result.data?.jcr?.nodesByCriteria?.nodes || [];
-    // ... generate CSV/JSON blob
-};
-```
-
-#### 2. Inside a dialog rendered in a portal (outside jcontent's tree)
-
-Dialog managers use `ReactDOM.createRoot` on a detached DOM node — **outside** jcontent's React tree — so the Apollo context is not inherited. You must wrap with `ApolloProvider` and pass the client explicitly:
-
-```javascript
-import {ApolloProvider} from '@apollo/client';
-
-// The apolloClient is received from the action's context (passed by jcontent)
-open({path, language, apolloClient}) {
-    this.root.render(
-        <ApolloProvider client={apolloClient}>
-            <I18nextProvider i18n={i18next}>
-                <MyDialog path={path} language={language} onClose={() => this.close()} />
-            </I18nextProvider>
-        </ApolloProvider>
-    );
-}
-```
-
-Inside `MyDialog`, `useQuery` / `useApolloClient` work normally because `ApolloProvider` is now in the tree.
-
-### Query authoring rules
-
-- Always use **static `gql` tagged templates** — never build query strings dynamically or as functions. Apollo's cache keys on the AST document, not a string.
-- Use **parameterized variables** (`$paths: [String]`) instead of interpolating values into the query string. This enables static `gql` tags and Apollo caching.
-- For LIVE workspace data (UGC — survey responses, comments, etc.), use `jcr(workspace: LIVE)`.
-- For editorial content (pages, components), use `jcr` (defaults to `default` workspace).
-- Use `nodesByCriteria` with `$paths` over `nodesByQuery` with interpolated SQL2 — it's safer and properly parameterized.
-
-### Anti-patterns — never do these
-
-```javascript
-// ❌ Never — axios has no session auth and is not the shared client
-import axios from 'axios';
-const data = await axios.post('/modules/graphql', {query, variables});
-
-// ❌ Never — fetch bypasses Apollo cache and CSRF guard
-const res = await fetch('/modules/graphql', {method: 'POST', body: JSON.stringify({query})});
-
-// ❌ Never — dynamic query strings break Apollo caching
-const buildQuery = (siteKey) => `query { jcr { nodesByQuery(query: "... WHERE ... '${siteKey}'") { ... } } }`;
-
-// ❌ Never — useQuery inside a portal without ApolloProvider (context missing)
-// DialogManager.open() → renders outside jcontent tree → useQuery will throw
 ```
 
 ---
@@ -509,8 +383,7 @@ class DialogManager {
 export default new DialogManager();
 ```
 
-> ⚠️ **Always use `<Dialog disableEnforceFocus>`** when rendering in a portal. Without it, MUI's FocusTrap
-> fights with jcontent's own focus management and causes an infinite loop.
+> ⚠️ **Always use `<Dialog disableEnforceFocus>`** when rendering in a portal. Without it, MUI's FocusTrap fights with jcontent's own focus management and causes an infinite loop.
 
 ```jsx
 // MyDialog.jsx
@@ -543,7 +416,7 @@ if (window.jahia?.toastDispatcher) {
     });
 }
 
-// JCR node/folder picker (opens jcontent file picker)
+// JCR node/folder picker
 if (window.CE_API?.openPicker) {
     window.CE_API.openPicker({
         type: 'folder',           // 'folder' | 'image' | 'file' | 'page' | 'content'
@@ -557,7 +430,7 @@ if (window.CE_API?.openPicker) {
     });
 }
 
-// Runtime context (current user, site, language)
+// Runtime context
 const { siteKey, uilang, currentUser } = window.contextJsParameters ?? {};
 ```
 
@@ -568,32 +441,17 @@ const { siteKey, uilang, currentUser } = window.contextJsParameters ?? {};
 Locale files live at `src/main/resources/javascript/locales/<lang>.json`. The top-level key is the module namespace. Always load the namespace before registering UI:
 
 ```json
-// en.json
 {
-  "my-module": {
-    "label": "My Module"
-  },
-  "action": {
-    "myAction": {
-      "label": "Do Something"
-    }
-  },
+  "my-module": { "label": "My Module" },
+  "action": { "myAction": { "label": "Do Something" } },
   "dialog": {
     "title": "...",
-    "button": {
-      "cancel": "Cancel",
-      "confirm": "Confirm"
-    }
+    "button": { "cancel": "Cancel", "confirm": "Confirm" }
   }
 }
 ```
 
-```javascript
-// In init.js — always await before registering UI
-await i18next.loadNamespaces('my-module');
-```
-
-Use `useTranslation('my-module')` (or `useTranslation()` if namespace is already loaded) in components.
+Use `useTranslation('my-module')` in components.
 
 ---
 
@@ -603,12 +461,9 @@ Use `useTranslation('my-module')` (or `useTranslation()` if namespace is already
 @Component(service = Action.class)
 public class MyAction extends Action {
 
-    @Reference
-    private RenderService renderService;       // if you need to render page HTML
-
     @Override
     public String getName() {
-        return "myActionName";                 // matches CSRF whitelist key
+        return "myActionName";   // matches CSRF whitelist key
     }
 
     @Override
@@ -620,19 +475,16 @@ public class MyAction extends Action {
             Map<String, List<String>> parameters,
             URLResolver urlResolver) throws Exception {
 
-        // 1. Read parameters
         String param = readParameter(parameters, "paramName", null);
 
-        // 2. Business logic (run as the calling user — no privilege escalation)
-
-        // 3. Stream a response (binary) or return JSON
+        // Return binary response
         HttpServletResponse response = renderContext.getResponse();
         response.setStatus(HttpServletResponse.SC_OK);
         response.setContentType("application/pdf");
         response.getOutputStream().write(bytes);
         return ActionResult.OK;
 
-        // OR return JSON to the client:
+        // OR return JSON:
         // JSONObject result = new JSONObject();
         // result.put("key", "value");
         // return new ActionResult(HttpServletResponse.SC_OK, null, result);
@@ -640,18 +492,9 @@ public class MyAction extends Action {
 }
 ```
 
-Action endpoint URL pattern:
-```
-POST /cms/render/default/{language}{nodePath}.{actionName}.do
-```
-
-Example: `POST /cms/render/default/en/sites/mySite/home.exportPagePdf.do`
-
-The client calls this with `credentials: 'same-origin'` and `X-Requested-With: XMLHttpRequest`.
+Action endpoint URL: `POST /cms/render/default/{language}{nodePath}.{actionName}.do`
 
 ### CSRF guard configuration
-
-Every Action endpoint must be whitelisted in the Jahia CSRF Guard, otherwise POST requests are rejected:
 
 ```properties
 # src/main/resources/META-INF/configurations/org.jahia.modules.jahiacsrfguard-<moduleName>.cfg
@@ -660,7 +503,7 @@ whitelist = *.myActionName.do
 
 ---
 
-## RenderContext setup (rendering page HTML from Java)
+## RenderContext setup
 
 When an Action needs to render a page to HTML, the `RenderContext` fields must be set in this exact order:
 
@@ -678,51 +521,15 @@ String html = renderService.render(htmlResource, ctx);
 
 ---
 
-## OSGi ManagedService (runtime configuration)
-
-For services that need runtime-configurable properties (timeouts, URLs, feature flags):
-
-```java
-@Component(
-    service = { MyService.class, ManagedService.class },
-    property = { "service.pid=org.jahia.modules.<name>.myService" },
-    immediate = true
-)
-public class MyServiceImpl implements MyService, ManagedService {
-
-    private volatile int timeoutMs = 30_000;
-
-    @Override
-    public void updated(Dictionary<String, ?> properties) throws ConfigurationException {
-        if (properties != null) {
-            Object v = properties.get("MY_TIMEOUT_MS");
-            if (v != null) timeoutMs = Integer.parseInt(v.toString());
-        }
-    }
-}
-```
-
-Config file at `src/main/resources/META-INF/configurations/org.jahia.modules.<name>.myService.cfg`:
-
-```properties
-MY_TIMEOUT_MS=30000
-```
-
-Operators can override at runtime by editing `<jahia-data-dir>/karaf/etc/org.jahia.modules.<name>.myService.cfg`.
-
----
-
 ## Embedding third-party libraries in the bundle
 
-When a library is not provided by Jahia at runtime, embed it:
+When a library is not provided by Jahia at runtime:
 
 ```xml
-<!-- pom.xml -->
 <dependency>
     <groupId>org.jsoup</groupId>
     <artifactId>jsoup</artifactId>
     <version>1.17.2</version>
-    <!-- No scope — will be embedded -->
 </dependency>
 
 <plugin>
@@ -737,29 +544,9 @@ When a library is not provided by Jahia at runtime, embed it:
 </plugin>
 ```
 
-> ⚠️ When embedding libraries that use the Java `ImageIO` / `ServiceLoader` SPI (e.g. TwelveMonkeys ImageIO),
-> you must instantiate their `ImageReaderSpi` classes directly using the **bundle's own classloader** — not
-> via `IIORegistry.getDefaultInstance()`, which uses a global registry that becomes stale after bundle refresh.
+For libraries using the Java `ServiceLoader` SPI, instantiate their classes directly using the **bundle's own classloader** — not via global registries that become stale after bundle refresh.
 
-```java
-// Per-call classloader pattern — safe across bundle restarts
-private BufferedImage decodeWebP(byte[] raw) throws Exception {
-    ClassLoader cl = getClass().getClassLoader();
-    // Instantiate directly — bypasses the stale global IIORegistry
-    Class<ImageReaderSpi> spiClass =
-        (Class<ImageReaderSpi>) cl.loadClass("com.twelvemonkeys.imageio.plugins.webp.WebPImageReaderSpi");
-    ImageReaderSpi spi = spiClass.getDeclaredConstructor().newInstance();
-    ImageReader reader = spi.createReaderInstance();
-    try (ImageInputStream iis = new MemoryCacheImageInputStream(new ByteArrayInputStream(raw))) {
-        reader.setInput(iis);
-        return reader.read(0);
-    } finally {
-        reader.dispose();
-    }
-}
-```
-
-Additionally, switch the Thread Context ClassLoader (TCCL) for any library that uses `Thread.currentThread().getContextClassLoader()` internally:
+Switch the Thread Context ClassLoader (TCCL) for any library that uses `Thread.currentThread().getContextClassLoader()` internally:
 
 ```java
 ClassLoader original = Thread.currentThread().getContextClassLoader();
@@ -773,38 +560,6 @@ try {
 
 ---
 
-## GraphQL file upload from React
-
-To upload a binary (e.g. a PDF blob) to JCR via GraphQL:
-
-```graphql
-mutation uploadFile(
-    $name: String!
-    $path: String!
-    $mimeType: String!
-    $fileHandle: String!
-) {
-    jcr {
-        addNode(name: $name, parentPathOrId: $path, primaryNodeType: "jnt:file") {
-            addChild(name: "jcr:content", primaryNodeType: "jnt:resource") {
-                content: mutateProperty(name: "jcr:data") {
-                    setValue(type: BINARY, value: $fileHandle)
-                }
-                contentType: mutateProperty(name: "jcr:mimeType") {
-                    setValue(value: $mimeType)
-                }
-            }
-            uuid
-            node { path }
-        }
-    }
-}
-```
-
-The Apollo client must be configured with a `createUploadLink` (or multipart link) for `File` variables to be serialized correctly. The `fileHandle` variable receives a `File` or `Blob` object from the client.
-
----
-
 ## Validation checklist
 
 ### JavaScript side
@@ -813,20 +568,18 @@ The Apollo client must be configured with a `createUploadLink` (or multipart lin
 - [ ] Entry point registers at `jahiaApp-init:N` via `registry.add('callback', ...)`
 - [ ] i18n namespace loaded (awaited) before registering UI
 - [ ] Action component uses `useNodeChecks` for visibility
+- [ ] `requireModuleInstalledOnSite` included in all `useNodeChecks` calls
 - [ ] Dialog rendered via portal manager (outside jcontent tree)
 - [ ] `<Dialog disableEnforceFocus>` on all MUI dialogs in portals
 - [ ] `window.jahia.*` APIs guarded with optional chaining (`?.`)
 - [ ] Webpack output goes to `src/main/resources/javascript/apps/`
-- [ ] `yarn dev` / `webpack --watch` never started from an agent
 
 ### Java side
 - [ ] Action class: `@Component(service = Action.class)`, `getName()` matches CSRF whitelist key
 - [ ] CSRF Guard config file present and correctly named
 - [ ] RenderContext set in order: site → workspace → servletPath → mainResource
 - [ ] All JCR access runs as the calling user (no system session escalation)
-- [ ] Embedded libraries use per-call classloader, not global SPI registries
-- [ ] TCCL switched for libraries that use `Thread.currentThread().getContextClassLoader()`
-- [ ] OSGi config `.cfg` file present for every `ManagedService`
+- [ ] OSGi config `.cfg` file present for every configurable service
 - [ ] `Embed-Dependency` declared in BND config for every embedded lib
 
 ---
