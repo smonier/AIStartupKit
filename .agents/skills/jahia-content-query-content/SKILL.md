@@ -49,7 +49,7 @@ curl -s -u root:root1234 \
   -H "Origin: http://localhost:8080" \
   -X POST http://localhost:8080/modules/graphql \
   -d '{
-    "query": "{ jcr { nodesByQuery(query: \"SELECT * FROM [llmacademy:docArticle] WHERE ISDESCENDANTNODE(\u0027/sites/mySite\u0027) ORDER BY [jcr:created] DESC\", queryLanguage: SQL2) { nodes { name path uuid } } } }"
+    "query": "{ jcr { nodesByQuery(query: \"SELECT * FROM [namespace:typeName] WHERE ISDESCENDANTNODE(\u0027/sites/mySite\u0027) ORDER BY [jcr:created] DESC\", queryLanguage: SQL2) { nodes { name path uuid } } } }"
   }'
 ```
 
@@ -70,10 +70,13 @@ curl -s -u root:root1234 \
 ### 4 — Filter by property value
 
 ```bash
-# All articles tagged as "jahia" product
--d '{
-  "query": "{ jcr { nodesByQuery(query: \"SELECT * FROM [llmacademy:docArticle] WHERE [product] = \u0027jahia\u0027 AND ISDESCENDANTNODE(\u0027/sites/mySite\u0027)\", queryLanguage: SQL2) { nodes { name path } } } }"
-}'
+curl -s -u root:root1234 \
+  -H "Content-Type: application/json" \
+  -H "Origin: http://localhost:8080" \
+  -X POST http://localhost:8080/modules/graphql \
+  -d '{
+    "query": "{ jcr { nodesByQuery(query: \"SELECT * FROM [namespace:article] WHERE [product] = \u0027jahia\u0027 AND ISDESCENDANTNODE(\u0027/sites/mySite\u0027)\", queryLanguage: SQL2) { nodes { name path } } } }"
+  }'
 ```
 
 ### 5 — List all sites
@@ -119,24 +122,9 @@ SELECT * FROM [ns:typeName] WHERE [propName] = 'value'
 -- Order by date (newest first)
 SELECT * FROM [ns:typeName] WHERE ISDESCENDANTNODE('/sites/mySite') ORDER BY [jcr:created] DESC
 
--- Limit results (use offset for pagination)
-SELECT * FROM [ns:typeName] WHERE ISDESCENDANTNODE('/sites/mySite') ORDER BY [jcr:created] DESC
--- pass limit/offset as query params: nodesByQuery(query: "...", queryLanguage: SQL2, limit: 10, offset: 0)
+-- Limit results (pass limit/offset as query params)
+-- nodesByQuery(query: "...", queryLanguage: SQL2, limit: 10, offset: 0)
 ```
-
----
-
-## Useful node type names
-
-| Content | JCR type |
-|---------|----------|
-| Site | `jnt:virtualsite` |
-| Page | `jnt:page` |
-| Content folder | `jnt:contentFolder` |
-| Doc article | `llmacademy:docArticle` |
-| Tutorial page | `llmacademy:tutorialPage` |
-| Hero section | `llmacademy:heroSection` |
-| Feature card | `llmacademy:featureCard` |
 
 ---
 

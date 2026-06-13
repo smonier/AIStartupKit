@@ -62,12 +62,14 @@ Use the task description to pick the right skill(s):
 
 | What the user wants to do | Skill |
 |---------------------------|-------|
+| Explore an unknown site's content types, property names, enum values, mixins | **`/jahia-content-explore-structure`** |
 | Find out what content exists, audit the tree, run a search | **`/jahia-content-query-content`** |
 | Create pages, articles, tutorials, folders, populate a site | **`/jahia-content-create-content`** |
 | Move, rename, restructure content into sub-folders | **`/jahia-content-move-content`** |
+| Translate existing content to another language | **`/jahia-content-translate-content`** |
 | Publish content to the live site | Use `publish` mutation (see below) |
 | Delete content | Use `deleteNode` mutation (see below) |
-| Do several of the above in sequence | Run the skills in order — start with query to audit, then create or move |
+| Do several of the above in sequence | Run the skills in order — start with **explore-structure** if site is unfamiliar, then create or move |
 
 ---
 
@@ -120,9 +122,11 @@ Always print this at the end so the user can navigate anywhere:
 ```
 ## Jahia Content Skills
 
-/jahia-content-query-content    List, inspect, and search content via GraphQL
-/jahia-content-create-content   Create nodes, folders, articles, and bulk-populate a site
-/jahia-content-move-content     Restructure the content tree: move, rename, reorder nodes
+/jahia-content-explore-structure    Map content types, properties, enums, mixins on an unknown site ← start here
+/jahia-content-query-content        List, inspect, and search content via GraphQL
+/jahia-content-create-content       Create nodes, folders, articles, and bulk-populate a site
+/jahia-content-move-content         Restructure the content tree: move, rename, reorder nodes
+/jahia-content-translate-content    Translate existing nodes to a new language and publish
 ```
 
 ---
@@ -130,6 +134,6 @@ Always print this at the end so the user can navigate anywhere:
 ## Critical rules (always enforce)
 
 - Always include `-H "Origin: http://localhost:8080"` in every curl — omitting it causes `Permission denied`
-- Always use `language: "en"` (or the site's language) for `i18n` properties (`jcr:title` on folders with `mix:title`, body, product, difficulty)
+- Always use `language: "en"` (or the site's language) for `i18n` properties (`jcr:title` on folders with `mix:title`, richtext body, etc.)
 - Always publish after creating or moving content — JCR writes to the **default workspace** only; live visitors see the **live workspace**
-- Mandatory fields (e.g. `body`) must be set **before** other properties on the same node
+- Mandatory fields (e.g. `body`) must be set **before** other properties on the same node in a new locale

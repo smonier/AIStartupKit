@@ -1,7 +1,6 @@
 ---
 name: jahia-dev-debug
 description: Debugs a Jahia JavaScript module end-to-end — build, deploy, and runtime errors. Finds the first error after deployment using live Docker logs.
-allowed-tools: Bash, Read, WebFetch
 ---
 
 # Skill: jahia-dev-debug
@@ -32,7 +31,7 @@ yarn jahia-deploy
 Interpret the output:
 - `"Operation successful"` in the response → deployment was accepted. Proceed to Step 3 — the module may still fail at runtime.
 - `"{}"` or empty JSON → deployment was **rejected** (usually a CND parse error or missing dependency). Proceed to Step 3 to find the cause in the logs.
-- Any other error → fix the connection issue (is `yarn dev` / Docker running?) then retry.
+- Any other error → fix the connection issue (is Docker running?) then retry.
 
 ---
 
@@ -48,7 +47,7 @@ Find the Jahia container name:
 docker ps --format '{{.Names}}' | grep -i jahia | head -1
 ```
 
-Then start tailing — pipe through `ts` (or prepend a timestamp manually) to see when entries appear:
+Then start tailing:
 
 ```bash
 docker logs -f <container-name> 2>&1 | grep -v "^\s*$" &
@@ -67,6 +66,20 @@ yarn jahia-deploy
 sleep 15 && kill $LOG_PID 2>/dev/null
 ```
 
+### 3d — Verify component registration
+
+```bash
+docker logs <container-name> 2>&1 | grep "Registered Jahia component"
+```
+
+Expected: one line per view registered, e.g.:
+```
+Registered Jahia component: mymodule_view_ns:hero_default
+Registered Jahia component: mymodule_view_ns:hero_small
+```
+
+If a component you just deployed is **absent** from this list, its `jahiaComponent` call was never reached — usually a syntax/import error in the view file that prevented the module from fully loading.
+
 ---
 
 ## Step 4 — Find the first error
@@ -81,6 +94,7 @@ Scan the captured log output for the **first** error that appears **after** the 
 | `Cannot set property` / `TypeError` in JS stack | View runtime error |
 | `Module ... failed to start` | Any of the above |
 | `Unresolved requirement` | OSGi dependency not satisfied |
+| Missing `Registered Jahia component` for a specific type | View file has a syntax/import error, or `jahiaComponent` not reached |
 
 **Focus on the first error, not the last.** Later errors are often cascading failures caused by the first one.
 
@@ -117,3 +131,46 @@ Every `jcr:mixinTypes` value in `import.xml` is scanned by the OSGi bundle resol
 
 ### View: module loads but page is blank
 Run `yarn dev` and check the Vite / SSR console for a React render error.
+
+---
+
+## GraalJS (server-side JS) debugging with Chrome DevTools
+
+Use this when you need to step through server-side view code running inside GraalVM.
+
+### Step 1 — Enable the inspector via GraphQL
+
+In Jahia's Developer Tools > GraphQL editor, run:
+
+```graphql
+mutation {
+  admin {
+    jahia {
+      configuration(pid: "org.jahia.modules.javascript.modules.engine.jsengine.GraalVMEngine") {
+        polyGlotInspect: value(name: "polyglot.inspect", value: "0.0.0.0:9229")
+        polyGlotInspectSuspend: value(name: "polyglot.inspect.Suspend", value: "false")
+        polyGlotInspectSecure: value(name: "polyglot.inspect.Secure", value: "false")
+      }
+    }
+  }
+}
+```
+
+### Step 2 — Map the port
+
+If running in Docker, ensure port `9229` is mapped in `docker-compose.yml`:
+
+```yaml
+ports:
+  - "9229:9229"
+```
+
+### Step 3 — Connect Chrome
+
+After the mutation, Jahia logs a `devtools://...` URL. Open it in Chrome (use latest; Chrome 117–118 had known debugger bugs).
+
+### Step 4 — Set a breakpoint and debug
+
+In Chrome DevTools Sources tab, open `<module>/dist/main.js`, set a breakpoint, then reload the page. The server-side render pauses at the breakpoint. Full scope inspection, step-over, and continue are supported.
+
+The config file `org.jahia.modules.javascript.modules.engine.jsengine.GraalVMEngine.cfg` accepts any `polyglot.*` key as an engine option — you can persist these settings there instead of using the GraphQL mutation.

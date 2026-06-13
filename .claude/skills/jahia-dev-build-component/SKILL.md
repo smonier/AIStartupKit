@@ -1,8 +1,6 @@
 ---
 name: jahia-dev-build-component
 description: Builds a complete Jahia component (content type + view + CSS) from a description. Meta-skill that orchestrates jahia-dev-define-content-type and jahia-dev-create-view. Use when asked to build a new UI component or section.
-allowed-tools: Bash, Read, Write, Edit
-context: fork
 ---
 
 ## Overview
@@ -77,7 +75,19 @@ Use the instructions from the `jahia-dev-create-view` skill to:
 2. Fill in the content form and click **Save**
 3. Verify the component renders correctly on the page
 4. Check for the error `No rendering set for node: <type>` â€” if seen, re-run `yarn build && yarn jahia-deploy`
-5. **If a reference screenshot was taken in Step 0**, invoke `/jahia-dev-screenshot` again (Step 3 of that skill) to capture the Jahia render and compare against the reference.
+5. **If a reference screenshot was taken in Step 0**, invoke `/jahia-dev-screenshot` again to capture the Jahia render and compare against the reference.
+
+---
+
+## Step 5 â€” Accessibility check
+
+After the component is live, invoke `/jahia-dev-accessibility` to audit it:
+
+1. Run the axe-core audit against the page(s) containing the new component
+2. Fix any `critical` or `serious` violations before considering the component done
+3. Report remaining violations to the user
+
+A component is not complete until it has no critical or serious accessibility violations.
 
 ---
 
@@ -111,6 +121,10 @@ If the component has child nodes (e.g. a hero with CTA buttons), repeat Steps 2â
 ## Troubleshooting
 > https://academy.jahia.com/tutorials-get-started/front-end-developer/making-a-hero-section
 
+## References
+
+- Preparing for i18n: https://academy.jahia.com/documentation/jahia-cms/jahia-8-2/developer/javascript-module-development/preparing-for-internationalization-i18n
+
 ---
 
 ## Validation checklist
@@ -123,3 +137,4 @@ If the component has child nodes (e.g. a hero with CTA buttons), repeat Steps 2â
 - [ ] `component.module.css` applied and visible
 - [ ] Component appears in Page Builder content picker
 - [ ] Content can be created and renders on the page
+- [ ] No critical or serious accessibility violations (`/jahia-dev-accessibility`)

@@ -705,8 +705,11 @@ public class MyServiceImpl implements MyService, ManagedService {
 Config file at `src/main/resources/META-INF/configurations/org.jahia.modules.<name>.myService.cfg`:
 
 ```properties
+# default configuration - won't be overriden
 MY_TIMEOUT_MS=30000
 ```
+
+> ⚠️ **The first line must be `# default configuration - won't be overriden` (exact string).** Jahia reads this marker and does NOT overwrite the file in `digital-factory-data/karaf/etc/` when the module is redeployed. Without it, every redeploy resets any operator-edited values back to the shipped defaults.
 
 Operators can override at runtime by editing `<jahia-data-dir>/karaf/etc/org.jahia.modules.<name>.myService.cfg`.
 

@@ -1,8 +1,6 @@
 ---
 name: jahia-dev-screenshot
 description: Takes screenshots of a reference URL and the local Jahia render for visual comparison. Use before building a view (inspiration) and after (validation).
-allowed-tools: Bash, Read, WebFetch
-model: haiku
 ---
 
 # Skill: jahia-dev-screenshot
@@ -107,7 +105,7 @@ npx playwright screenshot \
   /tmp/jahia-screenshots/result.png
 ```
 
-> Note: if the page requires login, add a step to authenticate first:
+> Note: if the page requires login, authenticate first:
 > ```bash
 > node -e "
 > const puppeteer = require('puppeteer');
@@ -168,7 +166,7 @@ If yes, update the view's `.tsx` and `.module.css` files using `/jahia-dev-creat
 ## Integration points
 
 This skill is called from:
-- `/jahia-dev-build-component` — Step 0 (optional reference) and Step 3 (result check)
+- `/jahia-dev-build-component` — Step 0 (optional reference) and Step 4 (result check)
 - `/jahia-dev-create-view` — Step 0 (optional reference) and after deploy
 
 ---

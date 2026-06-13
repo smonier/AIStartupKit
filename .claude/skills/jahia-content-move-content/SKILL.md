@@ -1,7 +1,6 @@
 ---
 name: jahia-content-move-content
 description: Moves and reorganizes JCR content nodes in Jahia. Use when asked to restructure content folders, nest flat content into sections, rename or move nodes, or tidy up a content tree.
-allowed-tools: Bash, Read, WebFetch
 ---
 
 # Skill: jahia-content-move-content
@@ -56,25 +55,6 @@ curl -s -u root:root1234 \
   }'
 ```
 
-A Python helper to print a visual tree:
-
-```python
-import subprocess, json
-
-def gql(q):
-    r = subprocess.run(["curl","-s","-u","root:root1234",
-        "-H","Origin: http://localhost:8080",
-        "-H","Content-Type: application/json",
-        "-X","POST","http://localhost:8080/modules/graphql",
-        "-d", json.dumps({"query": q})], capture_output=True, text=True)
-    return json.loads(r.stdout)
-
-r = gql('{ jcr { nodeByPath(path: "/sites/mySite/contents") { descendants { nodes { path primaryNodeType { name } } } } } }')
-for n in r["data"]["jcr"]["nodeByPath"]["descendants"]["nodes"]:
-    depth = n["path"].count("/") - 4
-    print("  " * depth + n["path"].split("/")[-1], f'({n["primaryNodeType"]["name"]})')
-```
-
 ---
 
 ## Step 2 — Create target sub-folders
@@ -117,11 +97,9 @@ curl -s -u root:root1234 \
   }'
 ```
 
-> ⚠️ `move` does **not** support a `name` argument — use `rename` separately if needed (see below).
+> ⚠️ `move` does **not** support a `name` argument — use `rename` separately if needed.
 
 ### Rename a node in place
-
-Use `rename(name:)` to change a node's name without moving it:
 
 ```bash
 curl -s -u root:root1234 \
@@ -183,7 +161,6 @@ for src, dest in moves:
 To control the display order within a folder, use `reorder` after moving:
 
 ```bash
-# Move a node to appear before another sibling
 curl -s -u root:root1234 \
   -H "Content-Type: application/json" \
   -H "Origin: http://localhost:8080" \
@@ -222,8 +199,6 @@ curl -s -u root:root1234 \
 ---
 
 ## Step 6 — Verify
-
-Confirm the final structure looks right before completing:
 
 ```bash
 curl -s -u root:root1234 \

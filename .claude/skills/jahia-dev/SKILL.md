@@ -1,8 +1,6 @@
 ---
 name: jahia-dev
 description: Entry point for Jahia JavaScript module development. Detects your project state and tells you what to do next. Start here if you are new to the project or unsure what skill to use.
-allowed-tools: Bash, Read
-model: haiku
 ---
 
 # Jahia Dev — Project GPS
@@ -122,4 +120,5 @@ Always print this at the end so the user can navigate anywhere:
 ### Quality
 /jahia-dev-review                Review code for Jahia and generic best practices
 /jahia-dev-screenshot            Screenshot reference URL + Jahia render for visual comparison
+/jahia-dev-debug                 Debug build/deploy/runtime errors end-to-end
 ```

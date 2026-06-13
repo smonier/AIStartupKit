@@ -494,9 +494,20 @@ public class MyAction extends Action {
 
 Action endpoint URL: `POST /cms/render/default/{language}{nodePath}.{actionName}.do`
 
+### OSGi `.cfg` files — required first line
+
+Every `.cfg` file shipped in a module **must** start with this exact comment:
+
+```properties
+# default configuration - won't be overriden
+```
+
+Jahia reads this marker and skips overwriting the file in `digital-factory-data/karaf/etc/` when the module is redeployed. Without it, every redeploy resets operator-edited values (API keys, URLs, tokens) back to the shipped defaults.
+
 ### CSRF guard configuration
 
 ```properties
+# default configuration - won't be overriden
 # src/main/resources/META-INF/configurations/org.jahia.modules.jahiacsrfguard-<moduleName>.cfg
 whitelist = *.myActionName.do
 ```

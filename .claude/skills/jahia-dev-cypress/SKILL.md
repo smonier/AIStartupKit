@@ -1,7 +1,6 @@
 ---
 name: jahia-dev-cypress
 description: Write and scaffold Cypress e2e tests for a Jahia JS template set. Covers directory setup, cypress.config.ts, @jahia/cypress commands, site creation/teardown, content seeding via addNode, component rendering assertions, CSS Module class selectors, and the three mandatory spec files per component.
-allowed-tools: Bash, Read, Write, Edit
 ---
 
 # SKILL — Jahia Cypress E2E Tests

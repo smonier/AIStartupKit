@@ -215,8 +215,6 @@ jahiaComponent(
 
 ## Step 7 — Build and deploy
 
-After making changes, build and deploy with:
-
 ```bash
 yarn build && yarn jahia-deploy
 ```
