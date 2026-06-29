@@ -136,7 +136,7 @@ cd <project-name> && yarn install
 - Default all user-facing string/text/richtext fields to `i18n`.
 - All `types.ts` props use `?:` (optional) — Jahia does not guarantee values at render time.
 - `jmix:mainResource` only for content that needs a listing card AND a full-page URL.
-- Structural container types use `jmix:hiddenType` (not `jmix:studioOnly`).
+- Only singleton layout types (header, footer) use `jmix:hiddenType` — **never** on child node types. `jmix:hiddenType` blocks Page Builder from selecting and editing those nodes inline. Child types managed inside a list parent must be plain `jnt:content` with no hidden flag.
 - **Never declare `j:linknode` or `j:url` in a CND** — injected by Jahia's mixins at runtime.
 
 ### Critical view rules
@@ -266,11 +266,15 @@ The full harness index is at [`.agents/README.md`](.agents/README.md). Quick ref
 | `/jahia-dev-create-template-set` | Scaffold a new JS/React module |
 | `/jahia-dev-start-local` | Start Jahia locally |
 | `/jahia-dev-build-component` | Build complete component (CND + view) ← shortcut |
-| `/jahia-dev-define-content-type` | Define CND + `types.ts` |
+| `/jahia-cnd-author` | **CND modeling agent** (`context: fork`) — produces `definition.cnd` + `types.ts` + `.properties`, self-validating; loads 9 CND reference docs. Prefer over define-content-type for non-trivial modeling. ⟵ from `@jahia/agentic` |
+| `/jahia-dev-define-content-type` | Define CND + `types.ts` (lightweight; delegates depth to `jahia-cnd-author`) |
+| `/jahia-dev-review-cnd` | Lint a CND file against Jahia antipatterns (deterministic `check-cnd.mjs`, PASS/FAIL + file:line) ⟵ agentic |
 | `/jahia-dev-create-view` | Implement React view + CSS Module |
 | `/jahia-dev-create-page-template` | Create page template with Areas |
 | `/jahia-dev-query-content` | JCR-SQL2 / `useJCRQuery` content listings |
+| `/jahia-jcr-sql2` | Focused JCR-SQL2 query reference ⟵ agentic |
 | `/jahia-dev-review` | Code review: critical, warnings, suggestions |
+| `/jahia-dev-site-review` | axe-core a11y + SEO **scoring** per page (gate after deploy) ⟵ agentic |
 | `/jahia-dev-screenshot` | Visual comparison: reference vs Jahia render |
 | `/jahia-dev-debug` | Debug build/deploy/runtime errors |
 | `/jahia-dev-cypress` | Scaffold Cypress e2e tests for any new component |
@@ -327,10 +331,17 @@ All new code — regardless of module type — is held to these standards at mer
 6. **Never use `yarn dev` from an agent.** Always use `yarn build && yarn jahia-deploy`.
 7. **Never hardcode UI strings in views** — use `t("key")` from `useTranslation()`. Front-end labels go in `settings/locales/en.json` + `fr.json`. CND labels go in `settings/resources/<module>_en.properties` + `_fr.properties`.
 8. **Never hardcode links or URLs** in views or templates. All navigable links come from contributed content.
-9. **Never use `jmix:studioOnly`** on structural types — use `jmix:hiddenType`.
+9. **Never use `jmix:hiddenType` on child node types.** It blocks Page Builder from selecting and editing those nodes inline. Only use it on singleton layout types (header, footer) placed in absolute areas. Child types inside orderable lists must extend plain `jnt:content` with no hidden flag so editors can click on them in Page Builder.
 10. **Never declare `j:linknode` or `j:url` in a CND** — they are injected by Jahia's mixins.
 17. **Any mixin that stores hidden child nodes must declare `+ childName (Type) = Type version` in the mixin body.** Without this, `session.addNode()` throws `ConstraintViolationException: No child node definition found` at runtime. The child node definition in the mixin is what grants Jackrabbit permission to add that child to any node of a type that extends the mixin.
 18. **Keep all locale JSON files in sync (`fr.json`, `en.json`, `es.json`).** A key present in one file but missing in another renders as the raw key for visitors using that language.
+19. **Navigation always goes 3 levels deep via a Jahia Navigation Menu component.** Never use hardcoded nav links or plain `<a>` lists. Use `getChildNodes` on the home page for level 1, level-1 children for level 2, and level-2 children for level 3. See navigation patterns context.
+20. **Use `linkTypeInitializer` for every contributor-facing link.** Any link a contributor can configure must use `j:linkType (string, choicelist[linkTypeInitializer])` in the CND. Never use a plain `string` field to store a URL.
+21. **Never create CND properties for Tags or Categories.** Use `jmix:tagged` (injects `j:tagList`) for free-form tags and `(weakreference, category[autoSelectParent=false]) multiple` for taxonomy categories. Do not invent custom tag/category fields.
+22. **Every migrated module ships a JCRQuery and GridRow component** adapted to the module namespace.
+23. **Resource bundle entries are mandatory at component creation time.** Whenever a new CND type or field is added, `_en.properties` and `_fr.properties` must be updated in the same step — never after. A deployed component with missing resource bundle entries shows raw technical names (e.g. `sialp:topBar`, `iconClass`) in the editor, which is broken UX. Every new type needs a type label; every field needs a label and a `ui.tooltip`.
+25. **Every resource bundle field key must have a companion `ui.tooltip` key.** No field in `.properties` files is complete without its tooltip — it is the primary documentation for content editors.
+24. **Every string a visitor can read must be a contributor-editable CND field.** This applies during migration especially: event dates, location names, CTA labels, button text, community slogans, submit button labels — any visible text. Add a `(string) i18n` property to the CND, use it in the view with a null-guard (`{props.label && <span>{props.label}</span>}`), and never fall back to a hardcoded default. A hardcoded label cannot be changed without a code deploy and silently breaks every language except the one it was written in.
 
 **OSGi UI extensions (Track 2)**
 
