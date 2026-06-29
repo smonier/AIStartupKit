@@ -167,6 +167,34 @@ import { buildNodeUrl } from "@jahia/javascript-modules-library";
 
 ### `RenderChildren` — render child nodes with optional pagination and filtering
 
+> **Critical for Page Builder editability.** When a parent component owns an orderable list of child items (carousel slides, key figures, cards, sector tiles…), you MUST use `<RenderChildren />` in the parent view. Using `getChildNodes` to render children inline produces identical HTML but bypasses the Page Builder selection layer — editors cannot click individual items or open the content editor for them.
+>
+> Companion requirement: every child type rendered via `<RenderChildren />` must have its own `jahiaComponent()` view registered. Without a view for the child type, `<RenderChildren />` has nothing to delegate to and Page Builder cannot attach an edit handle.
+>
+> Co-locate the child view registration in the same `default.server.tsx` as the parent, with the child `jahiaComponent()` call placed **before** the parent call:
+>
+> ```tsx
+> // Child view first — gives Page Builder a handle for each item
+> jahiaComponent(
+>   { componentType: "view", nodeType: "ns:keyFigure", displayName: "Key Figure" },
+>   (props: Props) => <div className="col">{props.number} {props.label}</div>,
+> );
+>
+> // Parent view second — wraps children in layout, delegates rendering to RenderChildren
+> jahiaComponent(
+>   { componentType: "view", nodeType: "ns:keyFigures", displayName: "Key Figures" },
+>   (props: Props) => (
+>     <section className="key-figures">
+>       <div className="row">
+>         <RenderChildren />
+>       </div>
+>     </section>
+>   ),
+> );
+> ```
+>
+> The child view's JSX must include its own layout wrapper (column div, `<li>`, etc.) so the parent's grid/list structure is preserved when Page Builder inserts its selection overlay around each child.
+
 ```tsx
 import { RenderChildren } from "@jahia/javascript-modules-library";
 
@@ -837,6 +865,8 @@ yarn build && yarn jahia-deploy
 - [ ] `buildNodeUrl` used for any image or node URL
 - [ ] Weakreference-backed content rendered via sub-view (`RenderChild`), not inline property access
 - [ ] Interactive UI (carousels, tabs) flattened in edit mode with editor hints
+- [ ] No JS carousel markup (Swiffy Slider, Swiper, etc.) in a server-only view — use flex layout
+- [ ] No `container` + `col-*` on the same element — use inline `maxWidth: "1140px"` on the content wrapper
 - [ ] Structural/shared nodes rendered with `readOnly` prop
 - [ ] Semantic HTML used (`<article>`, `<section>`, `<nav>`, `<header>`, `<footer>`)
 - [ ] Images have meaningful `alt` text (not empty `alt=""` unless decorative) — use `t("alt.key", {...})` for translated alt text
@@ -851,6 +881,32 @@ yarn build && yarn jahia-deploy
 
 ## Troubleshooting
 > https://academy.jahia.com/tutorials-get-started/front-end-developer/making-a-hero-section
+
+### `container` + `col-*` on the same element — component is full-width
+
+**Symptom:** Section renders at full viewport width instead of the expected 1140px cap.
+
+**Cause:** `col-*` sets `max-width: 100%` which silently overrides `container`'s `max-width: 1140px` when both classes are on the same element.
+
+**Fix:** Put them on separate elements, or use inline style on the content wrapper:
+```tsx
+// Wrong
+<div className="component-content container">  {/* max-width: 100% — container loses */}
+
+// Right
+<div className="component-content" style={{ maxWidth: "1140px", margin: "0 auto", width: "100%" }}>
+```
+
+### JS carousel shows only the first item in SSR
+
+**Cause:** Swiffy Slider, Swiper, Glide etc. rely on JS to translate slides and set `overflow: hidden`. Without a client island, JS never runs — only slide 0 is visible.
+
+**Fix:** Use a flex layout in `.server.tsx` and add a client island only if animated sliding is required:
+```tsx
+<ul style={{ display: "flex", flexWrap: "wrap", gap: "20px", listStyle: "none", padding: 0 }}>
+  {items.map((item) => <li key={item.getPath()}>...</li>)}
+</ul>
+```
 
 ### JSX vs HTML attribute differences
 

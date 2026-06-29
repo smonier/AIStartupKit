@@ -1,0 +1,3 @@
+
+# Local MCP server config — holds a live API token, never commit
+.mcp.json

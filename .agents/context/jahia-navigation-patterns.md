@@ -15,6 +15,7 @@ Navigation in Jahia must be **JCR-driven and CMS-editable** — never hardcoded.
    - `jnt:navMenuText` — label with no link, used as group heading → `<span>`
    - `jnt:nodeLink` — link to another JCR node
    - `jnt:externalLink` — link to an external URL
+6. **Always go 3 levels deep.** Navigation must render level 1 (top bar links), level 2 (dropdown menus), and level 3 (nested fly-out or sub-dropdown). Sites migrated to Jahia that have 3-level navigation in the original must not flatten it to 2 levels. The JCR page tree mirrors the site hierarchy — traverse it fully.
 
 ---
 
@@ -33,8 +34,12 @@ Nav items are read from the **home page's children** — the standard Jahia navi
   /about-us                    (jnt:page)   ← level-1 item
   /our-services                (jnt:page)   ← level-1 item (with level-2 children)
     /advisory                  (jnt:page)   ← level-2 → dropdown
+      /strategy                (jnt:page)   ← level-3 → nested sub-menu
+      /operations              (jnt:page)   ← level-3 → nested sub-menu
     /financing                 (jnt:page)   ← level-2 → dropdown
 ```
+
+Always traverse all 3 levels. A migrated site whose original navigation has 3 levels must not flatten it to 2.
 
 ---
 
@@ -89,6 +94,58 @@ const getItemTitle = (node: JCRNodeWrapper): string => {
   return node.getName();
 };
 ```
+
+---
+
+## 3-Level Navigation Render Pattern
+
+When the site has 3 levels of hierarchy, extend the render loop to nest a third `<ul>` inside each level-2 item:
+
+```tsx
+{level1Items.map((item) => {
+  const level2Items = getNavItems(item);
+  const hasL2 = level2Items.length > 0;
+
+  return (
+    <li key={item.getPath()} className={hasL2 ? styles.hasDropdown : ""}>
+      {item.isNodeType("jnt:navMenuText") ? (
+        <span className={styles.navLabel}>{getItemTitle(item)}</span>
+      ) : (
+        <a href={getItemUrl(item)} className={styles.navLink}>{getItemTitle(item)}</a>
+      )}
+
+      {hasL2 && (
+        <ul className={styles.dropdown}>
+          {level2Items.map((sub) => {
+            const level3Items = getNavItems(sub);
+            const hasL3 = level3Items.length > 0;
+
+            return (
+              <li key={sub.getPath()} className={hasL3 ? styles.hasFlyout : ""}>
+                <a href={getItemUrl(sub)} className={styles.dropdownLink}>{getItemTitle(sub)}</a>
+
+                {hasL3 && (
+                  <ul className={styles.flyout}>
+                    {level3Items.map((deep) => (
+                      <li key={deep.getPath()}>
+                        <a href={getItemUrl(deep)} className={styles.flyoutLink}>
+                          {getItemTitle(deep)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </li>
+  );
+})}
+```
+
+Level 3 is rendered as a CSS fly-out (position: absolute on the right of the level-2 item). It degrades gracefully: if a level-2 item has no children, `hasL3` is false and no extra markup is emitted.
 
 ---
 

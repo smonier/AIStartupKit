@@ -1,4 +1,5 @@
 {
+  "enabledMcpjsonServers": ["jahia"],
   "permissions": {
     "allow": [
       "Bash(yarn build)",
