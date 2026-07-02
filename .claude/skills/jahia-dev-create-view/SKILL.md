@@ -626,6 +626,8 @@ export default function Counter({ label, initialCount = 0 }: Props) {
 
 > ⚠️ **Props must be serializable**: only strings, numbers, booleans, plain objects, and arrays. You cannot pass `JCRNodeWrapper`, `renderContext`, or Java objects to a client component.
 
+> ⚠️ **i18n in client islands — always bind the namespace explicitly.** Use `const { t } = useTranslation("<module-name>")` from `react-i18next` in every `.client.tsx` component — never the bare `t` from `"i18next"`. The engine's client runtime calls `i18next.setDefaultNamespace(<bundle>)` on every island hydration, so on a page mixing islands from several modules the global default namespace belongs to whichever island hydrated last. SSR and initial hydration look fine; the raw keys only appear after a user interaction triggers a client-side re-render. (Server views can keep bare `t()` — the namespace is set synchronously around each server render.)
+
 ### Step 2 — Wrap it with `<Island>` in the server view
 
 ```tsx
