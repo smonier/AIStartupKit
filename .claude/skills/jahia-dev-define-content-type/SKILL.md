@@ -107,9 +107,9 @@ The `ctaLabel`, `ctaType`, `j:linknode`, `j:url` fields are inherited and ready 
 **Generic container — accept any droppable child:**
 
 ```cnd
-[ns:gridRow] > jnt:content, nsmix:component
- - columns (long) = '3' autocreated mandatory < '1', '2', '3', '4'
- + * (jmix:droppableContent)   // ← accepts ANY droppable component as a child
+[ns:gridRow] > jnt:content, nsMix:pageComponent
+ - columns (string, choicelist[resourceBundle]) = '2' < '1', '2', '3', '4'
+ + * (jmix:droppableContent) = jmix:droppableContent
 ```
 
 Use `+ * (jmix:droppableContent)` for layout containers that should not restrict which components editors can place inside them.
@@ -143,7 +143,7 @@ If the module uses a custom area type with `pageComponent` (see `jahia-dev-creat
 | Component will be… | Extend |
 |---|---|
 | Dropped in page areas (hero, sections, cards on a page) | `namespacemix:pageComponent` |
-| Used only as a child of another component (e.g. CTA inside a hero) | `namespacemix:component` |
+| Used only as a child of another component (e.g. CTA inside a hero) | `namespacemix:component` — and **no `jmix:hiddenType`** |
 | A `jmix:mainResource` type stored in a content folder and listed programmatically | `namespacemix:component` |
 
 > ⚠️ A component that extends only `namespacemix:component` **cannot be dropped in page areas** that use a `namespacemix:pageComponent` area type. This is the most common cause of editors not being able to contribute content to a new page.
@@ -152,12 +152,37 @@ If the module uses a custom area type with `pageComponent` (see `jahia-dev-creat
 
 ## Step 1 — Identify the component location
 
-CND files can live in two places:
+CND files live in two places with a strict division of responsibility:
 
-- **Component-level** (preferred): `src/components/<Category>/<Name>/definition.cnd`
-- **Module-level**: `settings/definitions.cnd` (for mixins and shared base types)
+- **Component-level** (mandatory for all component types): `src/components/<Category>/<Name>/definition.cnd` — contains only the type definitions for that component and its direct children (e.g. parent list type + child item type in the same file)
+- **Module-level**: `settings/definitions.cnd` — contains **only** namespace declarations and shared module mixins (`namespacemix:component`, `namespacemix:pageComponent`). Never put component type definitions here.
 
-For a new standalone component, always create a component-level `definition.cnd`.
+The `@jahia/vite-plugin` picks up all `definition.cnd` files from the `src/` tree and packages them alongside `settings/definitions.cnd`. Component CND files do not need to repeat namespace declarations — they are inherited from `settings/definitions.cnd`.
+
+**Module-level `settings/definitions.cnd` template:**
+```cnd
+<jnt  = 'http://www.jahia.org/jahia/nt/1.0'>
+<jmix = 'http://www.jahia.org/jahia/mix/1.0'>
+<ns   = 'https://www.jahia.org/ns/nt/1.0'>
+<nsmix = 'https://www.jahia.org/ns/mix/1.0'>
+
+[nsmix:component] > jmix:droppableContent, jmix:accessControllableContent mixin
+[nsmix:pageComponent] > nsmix:component mixin
+```
+
+**Component-level `src/components/Content/KeyFigures/definition.cnd` template:**
+```cnd
+[ns:keyFigure] > jnt:content
+ - icon (string)
+ - number (string)
+ - label (string) i18n
+
+[ns:keyFigures] > jnt:content, nsmix:pageComponent, jmix:list, jmix:renderableList orderable
+ - heading (string) i18n
+ + * (ns:keyFigure)
+```
+
+For a new component, always create a component-level `definition.cnd`. When the component has child types (orderable list), both the parent and child type definitions go in the same `definition.cnd` file in the parent's folder.
 
 ---
 
@@ -288,6 +313,66 @@ Render a `weakreference multiple` list in the view:
 | `primary` | Marks the most important field — Jahia's editor UI highlights it. One per type only. |
 | `orderable` | Allows reordering child nodes |
 
+---
+
+### Orderable list components — the required two-type pattern
+
+Any section that contains a variable number of editable child items (carousel slides, key figures, sector tiles, trend cards, partner logos…) follows a mandatory two-type structure:
+
+```cnd
+// ── Parent — droppable in page areas ────────────────────────────────────────
+[ns:keyFigures] > jnt:content, nsmix:pageComponent, jmix:list, jmix:renderableList orderable
+ - heading (string) i18n
+ + * (ns:keyFigure) = ns:keyFigure
+
+// ── Child — NOT jmix:hiddenType ─────────────────────────────────────────────
+[ns:keyFigure] > jnt:content
+ - icon (string)
+ - number (string)
+ - label (string) i18n
+```
+
+**Rules:**
+- Parent extends `jmix:list`, `jmix:renderableList`, and `orderable` — these three are required for list rendering and cache invalidation.
+- Child extends plain `jnt:content` with **no `jmix:hiddenType`** and **no component mixin**. `jmix:hiddenType` blocks Page Builder from selecting and editing individual items inline. Without it, editors can click each item, get the edit handle, and open the content form.
+- The view for the parent must use `<RenderChildren />` — **never `getChildNodes`** — to render the children. Only `<RenderChildren />` registers each child node with the Page Builder selection layer.
+- The child type must have its own registered `jahiaComponent()` view. Without a view, `<RenderChildren />` has nothing to render and Page Builder cannot attach an edit handle.
+
+**Wrong — blocks editor UX:**
+```cnd
+[ns:keyFigure] > jnt:content, jmix:hiddenType  // ← blocks selection in Page Builder
+```
+```tsx
+// ← getChildNodes bypasses Page Builder selection entirely
+const items = getChildNodes(currentNode, -1, 0, n => n.isNodeType("ns:keyFigure"));
+return <div>{items.map(item => <div>...</div>)}</div>;
+```
+
+**Correct:**
+```tsx
+// Child view — gives Page Builder a handle for each item
+jahiaComponent(
+  { componentType: "view", nodeType: "ns:keyFigure", displayName: "Key Figure" },
+  (props: Props) => <div className="col">{props.number}</div>,
+);
+
+// Parent view — RenderChildren wires up Page Builder selection
+jahiaComponent(
+  { componentType: "view", nodeType: "ns:keyFigures", displayName: "Key Figures" },
+  (props: Props, { currentNode }) => (
+    <section>
+      <div className="row">
+        <RenderChildren />
+      </div>
+    </section>
+  ),
+);
+```
+
+The child view is typically co-located in the same `default.server.tsx` file as the parent, with the child `jahiaComponent()` call placed first.
+
+---
+
 ```cnd
 [ns:blogPost] > jnt:content, nsmix:component
  - title (string) i18n mandatory primary               // ← highlighted in the editor
@@ -326,6 +411,23 @@ In the view, use a `switch` on `props["j:linkType"]` (see `jahia-dev-create-view
 
 > Under the hood: non-i18n fields are stored directly on the node; i18n fields are stored as properties of auto-created `jnt:translation_<language>` child nodes. You don't manage these directly, but knowing this helps when debugging missing translated values.
 
+### Tags and Categories — never create custom CND properties
+
+Jahia has built-in tagging and categorization capabilities. **Do not** create custom `tags (string) multiple`, `category (string)`, or `categories (weakreference) multiple` fields.
+
+**For free-form tags** — extend `jmix:tagged`, which injects the `j:tagList` property automatically:
+```cnd
+[ns:article] > jnt:content, nsmix:component, jmix:tagged
+```
+Editors will see a tag input field. Query with `WHERE CONTAINS(j:tagList, 'tagvalue')` in JCR-SQL2.
+
+**For taxonomy categories** — use a `weakreference` to Jahia's category tree with the `category` selector:
+```cnd
+[ns:article] > jnt:content, nsmix:component
+ - category (weakreference, category[autoSelectParent=false]) multiple
+```
+This opens Jahia's built-in category browser. `autoSelectParent=false` means selecting a child does NOT auto-select the parent (usually the right choice). Do NOT declare `j:defaultCategory` directly — it's a platform property used internally.
+
 ### Common mixins to extend
 
 | Mixin | Adds |
@@ -334,8 +436,9 @@ In the view, use a `switch` on `props["j:linkType"]` (see `jahia-dev-create-view
 | `namespacemix:component` | Makes this type available as a droppable component in Page Builder |
 | `mix:title` | Adds a `jcr:title` field |
 | `jmix:mainResource` | Makes the node accessible at its own URL — use only for content that needs **both a listing card AND a full detail page** (e.g. blog posts). Do not add to navigation-only or visual composition types. |
-| `jmix:hiddenType` | Hides a type from the Page Builder component picker (use for structural/container nodes editors should not add manually). Prefer over `jmix:studioOnly` which can cause silent rendering issues. |
+| `jmix:hiddenType` | Hides a type from the Page Builder **and prevents inline selection/editing in Page Builder**. Only use for singleton layout types (header, footer) placed in absolute areas. **Never use on child node types** — it prevents editors from clicking on individual items in the Page Builder. |
 | `jmix:accessControllableContent` | Enables per-component access control in jcontent — add to the base module mixin |
+| `jmix:tagged` | Adds `j:tagList` — use this for free-form tags, never invent a custom tag field |
 | `jmix:image` | Constraint: only image nodes |
 | `jmix:link` | Built-in link type |
 
@@ -431,7 +534,15 @@ All fields use `?:` regardless of whether they are mandatory in the CND.
 
 ---
 
-## Step 5 — Add UI translations and icon
+## Step 5 — Add resource bundle entries and icon ⚠️ MANDATORY — do not skip
+
+**This step is not optional.** Resource bundle entries must be written in the same session as the CND. A component deployed without them shows raw technical names (e.g. `sialp:topBar`, `iconClass`) in the content editor — this is broken from an editor's perspective and a sign the component is incomplete.
+
+**Every time a new CND type or field is added, update BOTH locale files immediately:**
+- `settings/resources/<module-name>_en.properties`
+- `settings/resources/<module-name>_fr.properties`
+
+If you add fields to an existing type later (e.g. during a bug fix), add their resource bundle entries in the same commit. Never deploy a type with missing entries.
 
 Editors see raw technical names without translations. Always add labels for every new content type.
 
@@ -443,15 +554,29 @@ Open `settings/resources/<module-name>.properties` (English) and `<module-name>_
 # Node type label (shown in the content picker and editor)
 namespace_typeName=Human-readable name
 
-# Field labels
+# Field labels — every field requires both a label AND a ui.tooltip
 namespace_typeName.fieldName=Field label
-namespace_typeName.fieldName.ui.tooltip=Optional tooltip shown next to the field in the editor.
+namespace_typeName.fieldName.ui.tooltip=Plain-language description shown next to the field in the content editor. Helps editors understand what to fill in and any constraints (e.g. "Keep under 200 characters").
 
 # choicelist[resourceBundle] option labels
 namespace_typeName.fieldName.optionKey=Option label
 ```
 
-All `ui.tooltip` values support basic HTML. Escape `<` and `>` as `&lt;` and `&gt;`.
+> **`ui.tooltip` is mandatory on every field.** It is the primary documentation for content editors. A field without a tooltip looks broken in the editor UI. All `ui.tooltip` values support basic HTML — escape `<` and `>` as `&lt;` and `&gt;`.
+
+**Example with tooltip for every field:**
+
+```properties
+ns_hero=Hero Section
+ns_hero.title=Title
+ns_hero.title.ui.tooltip=Main heading displayed at the top of the hero section.
+ns_hero.subtitle=Subtitle
+ns_hero.subtitle.ui.tooltip=Supporting text below the title. Keep under 200 characters.
+ns_hero.background=Background image
+ns_hero.background.ui.tooltip=Full-width background image. Recommended size: 1920x1080px.
+ns_hero.j:linkType=Call to action
+ns_hero.j:linkType.ui.tooltip=Link for the primary CTA button. Choose an internal page, an external URL, or leave empty to hide the button.
+```
 
 > For `choicelist[resourceBundle]` fields, the constraint values (e.g. `< 'house', 'apartment'`) must match the property keys (e.g. `namespace_type.field.house=House`).
 
@@ -538,12 +663,17 @@ If Jahia rejects the type definition (e.g. breaking change), use the **Installed
 - [ ] Uses `namespacemix:component` or `namespacemix:pageComponent` — **never** `jmix:droppableContent` directly
 - [ ] All required properties have the `mandatory` attribute
 - [ ] All user-facing string/text fields have `i18n` (default to always)
-- [ ] Structural/container types have `jmix:hiddenType` (not shown in picker) — do NOT use `jmix:studioOnly`
+- [ ] Only singleton layout types (header, footer in absolute areas) use `jmix:hiddenType` — **never on child node types of orderable lists**
+- [ ] Every orderable list parent extends `jmix:list`, `jmix:renderableList`, `orderable`
+- [ ] Every child type of an orderable list has its own `jahiaComponent()` view registered
 - [ ] Any mixin that calls `addNode()` on a child declares `+ childName (Type) = Type version` in the mixin definition
 - [ ] `jmix:mainResource` only used for listing + detail content (not visual composition)
+- [ ] **No custom tag or category fields** — tags use `jmix:tagged`, categories use `(weakreference, category[autoSelectParent=false]) multiple`
+- [ ] **Every link field uses `j:linkType (string, choicelist[linkTypeInitializer])`** — no plain string URL fields
+- [ ] **Shared property groups extracted to mixins** — if the same 2+ fields appear on another type, make it a mixin first
 - [ ] `types.ts` created with correct TypeScript types
 - [ ] Views handle null/missing values gracefully (mandatory does not guarantee a value)
-- [ ] Translation keys added to `.properties` files (EN + FR minimum)
+- [ ] **Resource bundle entries written for EVERY type AND field in BOTH `_en.properties` and `_fr.properties`** — every field requires a label AND a `ui.tooltip`. This is a blocking requirement: a component without resource bundle entries is incomplete regardless of whether the code compiles.
 - [ ] Icon created at `settings/content-types-icons/<namespace>_<typeName>.png`
 - [ ] `yarn build && yarn jahia-deploy` run and type appears in Jahia content editor with correct label and icon
 

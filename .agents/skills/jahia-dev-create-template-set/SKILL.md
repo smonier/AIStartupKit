@@ -180,6 +180,22 @@ curl -s -u root:root1234 \
 
 The response must contain `"name": "<module-name>"`. If the path returns `null`, the site was not created — check that `templateSet` exactly matches the deployed module name.
 
+### Post-creation: set required language properties
+
+After the site is created, always set `j:inactiveLanguages` and `j:inactiveLiveLanguages` on the site node. Without them, some Jahia features (language switcher, publication workflows) behave unpredictably.
+
+```bash
+curl -s -u root:root \
+  -H "Content-Type: application/json" \
+  -H "Origin: http://localhost:8080" \
+  -X POST http://localhost:8080/modules/graphql \
+  -d @- <<'GRAPHQL'
+{"query":"mutation { jcr { mutateNode(pathOrId: \"/sites/<siteKey>\") { p1: mutateProperty(name: \"j:inactiveLanguages\") { setValues(values: []) } p2: mutateProperty(name: \"j:inactiveLiveLanguages\") { setValues(values: []) } } } }"}
+GRAPHQL
+```
+
+Both mutations must return `"setValues": true`.
+
 ---
 
 ## Generated structure (Hello World template set)
@@ -230,3 +246,4 @@ If anything goes wrong during setup or scaffolding, refer to the official Jahia 
 - [ ] `yarn install` completes without errors
 - [ ] `yarn build && yarn jahia-deploy` succeeds — module appears at `/modules/<name>` in JCR
 - [ ] Site created with `createSite: ""` — JCR confirms `/sites/<name>` exists
+- [ ] `j:inactiveLanguages` and `j:inactiveLiveLanguages` set to `[]` on the site node

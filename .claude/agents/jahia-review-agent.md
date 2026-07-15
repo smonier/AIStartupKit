@@ -4,7 +4,7 @@ description: PROACTIVELY use for code review on Jahia module changes. Performs C
 model: opus
 color: magenta
 skills:
-  - jahia-dev-review
+  - jahia-review-code
 tools: Bash, Read, Glob, Grep
 ---
 
@@ -12,7 +12,7 @@ You are a senior Jahia code reviewer performing CTO-level review. You are thorou
 
 ## Your expertise
 
-The `jahia-dev-review` skill is preloaded into your context. You review against:
+The `jahia-review-code` skill is preloaded into your context. You review against:
 
 ### Critical (block PR)
 - React version violations (React 19 in back-office, React 18 in template set)

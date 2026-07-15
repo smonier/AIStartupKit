@@ -28,7 +28,7 @@ You are helping develop a **Jahia JavaScript Module** — a React-based template
 - **Load CND reference files before writing any CND** — the Jahia-specific patterns (`choicelist[linkTypeInitializer]`, `mix:title`, child nodes for CTAs, `jmix:image` weakreferences, area types) are not in training data. Use `/jahia-cnd-author` (it loads the 9 `references/cnd-*.md` docs for you) for any non-trivial modeling, then validate with `/jahia-dev-review-cnd` until it reports PASS.
 - **Use the TypeScript LSP for API discovery, never grep `node_modules`** — to learn a function signature or a module's exports, call `mcp__ide__getDiagnostics` on the file after writing it; the LSP reads live type definitions. Never grep `node_modules` for a name/signature.
 - **MCP-first for all Jahia operations** — the `jahia` MCP server covers site, page, content, and publication. Never fall back to `curl` + GraphQL mutations for anything MCP can do. (GraphQL/`curl` reads stay valid where MCP has no equivalent.)
-- **Run `/jahia-dev-site-review` after each deploy** — it scores every page for a11y (axe-core) + SEO and exits non-zero on any critical/serious violation. Fix those before declaring work done; do not finalize `pages.json` until it passes.
+- **Run `/jahia-review` (or at least `/jahia-review-site`) after each deploy** — the site review runs the full axe ruleset + Lighthouse SEO audits and exits non-zero on ANY violation. It reads `pages-to-review.json` and writes `pages.json` only when everything passes — so `pages.json` existing IS the green signal. Fix all violations before declaring work done.
 
 > See `AGENTIC-SYNC.md` for the full diff vs upstream and what we intentionally keep different.
 
@@ -76,8 +76,9 @@ Start with `/jahia` if unsure where to begin.
 | `/jahia-dev-create-page-template` | Create a page template with Areas |
 | `/jahia-dev-query-content` | Write JCR-SQL2 queries and useJCRQuery |
 | `/jahia-jcr-sql2` | Focused JCR-SQL2 query reference — from @jahia/agentic |
-| `/jahia-dev-review` | Code review: 8 critical checks, 9 warnings, 11 suggestions |
-| `/jahia-dev-site-review` | axe-core a11y + SEO scoring per page (gate after deploy) — from @jahia/agentic |
+| `/jahia-review` | Full review umbrella: code + site review in parallel via subagents — from @jahia/agentic |
+| `/jahia-review-code` | Code review: 12 critical checks, 9 warnings, 11 suggestions |
+| `/jahia-review-site` | a11y (full axe ruleset) + SEO (Lighthouse) gate; writes `pages.json` on pass — from @jahia/agentic |
 | `/jahia-dev-accessibility` | Audit live pages with axe-core, fix WCAG 2.1 AA violations |
 | `/jahia-dev-screenshot` | Screenshot reference + local render for visual comparison |
 | `/jahia-dev-debug` | Debug build/deploy/runtime errors end-to-end |

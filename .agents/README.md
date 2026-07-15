@@ -39,7 +39,9 @@ If you are an AI agent, this is the second file you read after [`../CLAUDE.md`](
 | [`/jahia-dev-create-view`](skills/jahia-dev-create-view/SKILL.md) | Implement a React view (`.server.tsx` + CSS Module) |
 | [`/jahia-dev-create-page-template`](skills/jahia-dev-create-page-template/SKILL.md) | Create a page template with Areas |
 | [`/jahia-dev-query-content`](skills/jahia-dev-query-content/SKILL.md) | Write JCR-SQL2 / `useJCRQuery` for content listings |
-| [`/jahia-dev-review`](skills/jahia-dev-review/SKILL.md) | Code review: critical checks, warnings, suggestions |
+| [`/jahia-review`](skills/jahia-review/SKILL.md) | Full review umbrella: code + site review in parallel via subagents |
+| [`/jahia-review-code`](skills/jahia-review-code/SKILL.md) | Code review: critical checks, warnings, suggestions |
+| [`/jahia-review-site`](skills/jahia-review-site/SKILL.md) | a11y (axe full ruleset) + SEO (Lighthouse) gate — writes `pages.json` on pass |
 | [`/jahia-dev-screenshot`](skills/jahia-dev-screenshot/SKILL.md) | Screenshot reference + Jahia render for visual comparison |
 | [`/jahia-dev-debug`](skills/jahia-dev-debug/SKILL.md) | Debug build/deploy/runtime errors end-to-end |
 | [`/jahia-dev-cypress`](skills/jahia-dev-cypress/SKILL.md) | Scaffold and write Cypress e2e tests: directory setup, site seed/teardown, addNode, CSS Module selectors, three mandatory spec files |

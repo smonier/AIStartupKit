@@ -84,6 +84,10 @@ curl -s -u root:root -H "Content-Type: application/json" -H "Origin: http://loca
 
 ### 4. Publish the entire page in one call
 
+> ⚠️ **Publish in a SEPARATE request, never in the same mutation as content changes.** A `publish` field inside the mutation that also creates/mutates nodes executes against the PRE-save state: the publication job reports `paths=[]`, publishes nothing new, and flushes no cache — while returning `"publish": true`. Symptom: default workspace is correct, live silently stale.
+
+
+
 ```bash
 curl -s -u root:root -H "Content-Type: application/json" -H "Origin: http://localhost:8080" \
   -X POST http://localhost:8080/modules/graphql \

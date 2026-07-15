@@ -273,8 +273,9 @@ The full harness index is at [`.agents/README.md`](.agents/README.md). Quick ref
 | `/jahia-dev-create-page-template` | Create page template with Areas |
 | `/jahia-dev-query-content` | JCR-SQL2 / `useJCRQuery` content listings |
 | `/jahia-jcr-sql2` | Focused JCR-SQL2 query reference ⟵ agentic |
-| `/jahia-dev-review` | Code review: critical, warnings, suggestions |
-| `/jahia-dev-site-review` | axe-core a11y + SEO **scoring** per page (gate after deploy) ⟵ agentic |
+| `/jahia-review` | **Full review umbrella** — runs `/jahia-review-code` + `/jahia-review-site` in parallel via subagents, consolidated PASS/FAIL ⟵ agentic |
+| `/jahia-review-code` | Code review: 12 critical checks, 9 warnings, 11 suggestions |
+| `/jahia-review-site` | a11y (full axe ruleset) + SEO (Lighthouse audits) gate — reads `pages-to-review.json`, writes `pages.json` only on pass ⟵ agentic |
 | `/jahia-dev-screenshot` | Visual comparison: reference vs Jahia render |
 | `/jahia-dev-debug` | Debug build/deploy/runtime errors |
 | `/jahia-dev-cypress` | Scaffold Cypress e2e tests for any new component |

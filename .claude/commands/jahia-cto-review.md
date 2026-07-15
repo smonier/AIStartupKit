@@ -1,10 +1,10 @@
 ---
-name: jahia-review
+name: jahia-cto-review
 description: Run a CTO-level code review on the current git diff or a specific file. Checks React version, CSRF, session safety, i18n, Javadoc, GraphQL design, and more. Use before any PR.
 argument-hint: [file or directory path, or leave empty for git diff]
 ---
 
-# /jahia-review
+# /jahia-cto-review
 
 You are orchestrating a CTO-level Jahia code review.
 
@@ -26,7 +26,7 @@ Perform a CTO-level Jahia code review on the following changes.
 
 Review scope: <file path OR git diff output>
 
-Apply all checks from the jahia-dev-review skill:
+Apply all checks from the jahia-review-code skill:
 - CRITICAL: React version violations, missing CSRF, thread-unsafe session storage, missing save/publish
 - WARNING: Missing i18n EN+FR, missing null guards, OSGi field state, missing authorization, missing Javadoc
 - SUGGESTIONS: CSS variable fallbacks, server vs client component choice, scale-of-thumbs

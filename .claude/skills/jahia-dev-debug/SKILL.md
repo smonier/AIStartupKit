@@ -174,3 +174,40 @@ After the mutation, Jahia logs a `devtools://...` URL. Open it in Chrome (use la
 In Chrome DevTools Sources tab, open `<module>/dist/main.js`, set a breakpoint, then reload the page. The server-side render pauses at the breakpoint. Full scope inspection, step-over, and continue are supported.
 
 The config file `org.jahia.modules.javascript.modules.engine.jsengine.GraalVMEngine.cfg` accepts any `polyglot.*` key as an engine option — you can persist these settings there instead of using the GraphQL mutation.
+
+---
+
+## Visual layout — section width and collapse
+
+### Component is full-width when it should be constrained to 1140px
+
+**Symptom:** A component's inner content spans the full viewport instead of the expected container width.
+
+**Cause:** `container` + `col-*` on the same element. Bootstrap `col-*` classes set `max-width: 100%` which overrides `container`'s `max-width: 1140px`. Even `col-12` wins on the same element.
+
+**Diagnosis:**
+```javascript
+// In browser console:
+getComputedStyle(document.querySelector('.your-section .component-content')).maxWidth;
+// Returns "100%" instead of "1140px" → container+col conflict
+```
+
+**Fix:** Remove the `container` class; use inline style on the content wrapper:
+```tsx
+<div className="component-content" style={{ maxWidth: "1140px", margin: "0 auto", width: "100%" }}>
+```
+
+### Component collapses to ~50px height
+
+1. **JS carousel (`overflow: hidden`)** — Swiffy Slider and similar libraries set this; without JS init, height = 0. Fix: use flex layout in server views.
+2. **`position: absolute` children inside non-positioned parent** — absolute children are out of flow, parent has no height. Fix: add `position: relative; min-height: Xpx`.
+3. **Empty content** — check `document.querySelector('.component').innerHTML` before diagnosing CSS.
+
+### JS-dependent carousel shows only one item
+
+Carousels using Swiffy Slider, Swiper, etc. show only slide 0 in SSR without JS. Replace with a flex layout in `.server.tsx`:
+```tsx
+<ul style={{ display: "flex", flexWrap: "wrap", gap: "20px", listStyle: "none", padding: 0 }}>
+  {items.map(item => <li key={item.getPath()}>...</li>)}
+</ul>
+```

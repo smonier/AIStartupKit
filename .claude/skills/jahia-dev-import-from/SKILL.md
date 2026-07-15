@@ -242,3 +242,142 @@ Expected: one line per view. If absent, check the build output for TypeScript er
 - **Island for anything interactive** — animations, browser events, `useState`, third-party JS → `.client.tsx`
 - **All props optional in `types.ts`** — even CND `mandatory` fields
 - **Edit mode awareness** — carousels, sliders, and tabs should render flat in edit mode
+
+---
+
+## Migration-specific rules (always apply when migrating a full site)
+
+### Navigation: always 3 levels via Jahia Navigation Menu
+
+Never build nav links as hardcoded `<a>` tags or plain lists. The navigation must:
+1. Be a dedicated `ns:mainNavigation` component dropped in the header area.
+2. Read from the JCR page tree using `getChildNodes` — level 1 from home, level 2 from each level-1 child, level 3 from each level-2 child.
+3. Support all 4 nav item types: `jnt:page`, `jnt:navMenuText`, `jnt:nodeLink`, `jnt:externalLink`.
+4. Render level 3 as a nested dropdown or fly-out (not collapsed into level 2).
+
+See `.agents/context/jahia-navigation-patterns.md` for the full helper function pattern.
+
+### Every contributor link uses `linkTypeInitializer`
+
+Every field where a contributor can set a link — CTA buttons, hero links, card links, teaser links, footer nav items, banner links — must use `linkTypeInitializer` in the CND. No exceptions.
+
+```cnd
+// Always this:
+- j:linkType (string, choicelist[linkTypeInitializer]) indexed=no
+// Never this:
+- url (string) indexed=no
+```
+
+### Never create CND properties for Tags or Categories
+
+If the source site has tag clouds, article tags, category filters, or taxonomy navigation:
+- **Tags** → extend `jmix:tagged` on the content type. The `j:tagList` property is injected automatically.
+- **Categories** → use `(weakreference, category[autoSelectParent=false]) multiple`. Point to Jahia's built-in category tree.
+
+Do not create `tags (string) multiple`, `category (weakreference)`, or any similar custom property.
+
+### Always package JCRQuery and GridRow
+
+Every migrated module must include these two structural components adapted to the module namespace. The canonical implementation lives at `/Users/stephane/Runtimes/0.Modules/soprahr/mysoprahr/src/components/GridRow/` — copy and rename all `shr:` / `shr` references to the target namespace prefix.
+
+**GridRow — canonical implementation (3 files):**
+
+```cnd
+// src/components/GridRow/definition.cnd
+[ns:gridRow] > jnt:content, nsMix:pageComponent
+ - columns (string, choicelist[resourceBundle]) = '2' < '1', '2', '3', '4'
+ + * (jmix:droppableContent) = jmix:droppableContent
+```
+
+```tsx
+// src/components/GridRow/default.server.tsx
+import { AbsoluteArea, jahiaComponent } from "@jahia/javascript-modules-library";
+import styles from "./gridRow.module.css";
+
+const MAX_COLS = 4;
+const MIN_COLS = 1;
+const DEFAULT_COLS = 2;
+
+function parseColumns(raw: unknown): number {
+  const n = Number(raw);
+  if (Number.isNaN(n) || n < MIN_COLS) return DEFAULT_COLS;
+  return Math.min(MAX_COLS, Math.trunc(n));
+}
+
+jahiaComponent(
+  { componentType: "view", nodeType: "ns:gridRow", displayName: "Grid Row" },
+  ({ columns: rawCols }: { columns?: string }, { currentNode }) => {
+    const cols = parseColumns(rawCols);
+    const areaNames = Array.from({ length: cols }, (_, index) => index);
+    return (
+      <section className={styles.root}>
+        <div
+          className={styles.row}
+          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+        >
+          {areaNames.map((col) => (
+            <div key={col} className={styles.col}>
+              <AbsoluteArea parent={currentNode} name={`${currentNode.getName()}-col-${col}`} />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  },
+);
+```
+
+```css
+/* src/components/GridRow/gridRow.module.css */
+.root { width: 100%; }
+
+.row {
+  display: grid;
+  width: 100%;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.col > * { min-width: 0; }
+
+@media (max-width: 1024px) { .row { gap: 1.25rem; } }
+
+@media (max-width: 767px) {
+  .row { grid-template-columns: 1fr !important; gap: 1rem; }
+}
+```
+
+**Design notes:**
+- `AbsoluteArea` (not `Area`) — column slots are named `${currentNode.getName()}-col-0`, `-col-1`, etc. Stable across sessions; no UUID suffix needed.
+- `parseColumns()` clamps to [1–4], defaults to 2. Rejects decimals with `Math.trunc`.
+- `minmax(0, 1fr)` + `min-width: 0` prevents flex/grid blowout on long content.
+- Mobile breakpoint at 767px overrides the inline style with `!important` to force single column.
+- No edit-mode branch — `AbsoluteArea` handles editor chrome automatically.
+
+### Extract mixins before the second content type
+
+Before writing a second content type definition, scan the fields already defined and extract shared groups into module-level mixins in `settings/definitions.cnd`. Common candidates:
+- `nsmix:cta` — `j:linkType (linkTypeInitializer)` + `ctaLabel (string) i18n`
+- `nsmix:media` — `image (weakreference, picker[type='image'])` + `imageAlt (string) i18n`
+- `nsmix:badge` — `badgeText (string) i18n` + `badgeColor (string, choicelist)`
+- `nsmix:seo` — `metaTitle (string) i18n` + `metaDescription (string, textarea) i18n`
+
+### `ui.tooltip` on every resource bundle entry
+
+Every `.properties` key for a field label must be followed immediately by a `.ui.tooltip` key. This is the only in-editor documentation editors see.
+
+```properties
+ns_article.title=Title
+ns_article.title.ui.tooltip=Article headline. Keep under 80 characters for SEO.
+ns_article.body=Body
+ns_article.body.ui.tooltip=Main article content. Supports rich text formatting.
+ns_article.j:linkType=Read more link
+ns_article.j:linkType.ui.tooltip=Optional CTA link at the end of the article. Leave empty to hide.
+```

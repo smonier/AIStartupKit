@@ -1,6 +1,8 @@
 ---
 name: jahia-osgi-module
 description: Conventions and invariants for building any Jahia OSGi/Java bundle module (Jahia 8.2). Use when working on Maven bundle structure, OSGi Declarative Services, JCR integration, or Java package design.
+allowed-tools: Bash, Read, Write, Edit
+context: fork
 ---
 
 # SKILL — Jahia OSGi Module Development (8.2)
