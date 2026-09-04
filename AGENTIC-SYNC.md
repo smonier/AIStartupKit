@@ -4,7 +4,7 @@ This repo's Jahia JS-module skills track the official reference harness
 [`Jahia/agentic`](https://github.com/Jahia/agentic) (`@jahia/agentic` on npm).
 It is an **ongoing-improvement** repo — re-check periodically.
 
-- **Last synced:** v0.5.1 (2026-07-15)
+- **Last synced:** v0.6.0 (2026-09-03)
 - **Re-sync command:** `./.agents/agentic-sync.sh` (clones upstream, prints
   missing / changed / identical / local-only). Update this file afterward.
   ⚠ The script only diffs `SKILL.md` — also `diff -rq` the `references/` and
@@ -13,6 +13,23 @@ It is an **ongoing-improvement** repo — re-check periodically.
   identical (`diff -rq .agents/skills .claude/skills`). Every skill edit goes
   to BOTH. The v0.5.1 pass repaired 11 drifted files where commits had patched
   only one side.
+
+## Incorporated at v0.6.0 (2026-09-03)
+
+Upstream delta v0.5.1 → v0.6.0 is a single new skill (plus its AGENTS.md row). Every other
+shared skill, `references/` dir and `check-cnd.mjs` is byte-identical to what we already
+diffed at v0.5.1, so the CHANGED table below is unchanged.
+
+| Skill | Notes |
+|---|---|
+| **`jahia-dev-migrate-jsp`** (new) | added verbatim (SKILL.md + `references/{gotchas,not-portable,tag-mapping}.md`) to `.agents/skills/` and `.claude/skills/`. JSP/Java template set → JS module: audit into 3 portability tiers weighted by a real content export, ask the operator 3 scope questions (CSS as-is vs CSS Modules, keep jQuery vs islands, keep vs rewrite the Java remainder), port tag-by-tag with a mechanical naming rule, keep a stripped companion Java bundle for skins / `moduleMap` views / choicelist initializers / filters / rules, and close with an every-file accounting (registered / imported / tier-3 / dead). Complements our `automated-migration` harness (distant-site → Jahia) with the in-Jahia legacy path. |
+
+Local-convention notes for that skill (kept verbatim, so future syncs stay IDENTICAL —
+apply these when following it here): it says `yarn deploy` where our scaffolds use
+`yarn jahia-deploy`; its Step 8 hands `yarn dev` to the *human* developer, which is fine —
+the agent-side rule "never run `yarn dev` from an agent" still applies; its `root:root1234`
+curl matches upstream's default, our local Jahia is `root:root`. Its `gotchas.md` independently
+confirms our root-`icons/` ZipException and `module-priority` traps.
 
 ## Incorporated at v0.5.1 (2026-07-15)
 
@@ -53,7 +70,7 @@ each deploy.
 
 ## CHANGED skills — diverged, keep ours (re-check each pass)
 
-Present in both but content differs. Ours lead everywhere as of v0.5.1;
+Present in both but content differs. Ours lead everywhere as of v0.6.0 (re-verified 2026-09-03, incl. `references/` + `scripts/`);
 reconcile field-by-field only if upstream grows something we lack:
 
 | Skill | agentic / local (lines) | Lead |

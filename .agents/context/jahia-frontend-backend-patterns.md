@@ -104,6 +104,17 @@ return (
 `resources` is relative to the module root. Jahia resolves it to `/modules/<module-name>/dist/assets/style.css`.  
 The `key` prop prevents duplicate `<link>` tags when several components from the same module appear on one page.
 
+### CSS rule for add-on modules: a scoped reset must use `:where()`
+
+An add-on module cannot ship Tailwind preflight or any global element reset (it would restyle the
+host template set). Scoping the reset under the island wrapper is right, but write it as
+`.portal-insight :where(h1, h2, h3, p)` / `.portal-insight :where(button)`, never as
+`.portal-insight h2` / `.portal-insight button`. Class + element specificity outranks a single-class
+utility whatever the `@layer` order: with the plain form every `text-3xl`, `font-bold`, `bg-*` on
+headings and buttons silently loses (measured: h2 at 16px/400, buttons transparent). `:where()`
+adds zero specificity, so the scope stays and utilities win. Also prefix design tokens
+(`--custp-primary`, not `--primary`) so the host theme cannot collide with them.
+
 ### Node URL rule: `buildNodeUrl(node)`, never `node.getPath()`
 
 `node.getPath()` returns the raw JCR path (e.g. `/sites/mysite/contents/blog/my-post`). Used as an `href`, Jahia cannot route it and redirects to the homepage.

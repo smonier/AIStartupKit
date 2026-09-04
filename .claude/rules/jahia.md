@@ -81,6 +81,7 @@ Start with `/jahia` if unsure where to begin.
 | `/jahia-review-site` | a11y (full axe ruleset) + SEO (Lighthouse) gate; writes `pages.json` on pass — from @jahia/agentic |
 | `/jahia-dev-accessibility` | Audit live pages with axe-core, fix WCAG 2.1 AA violations |
 | `/jahia-dev-screenshot` | Screenshot reference + local render for visual comparison |
+| `/jahia-dev-migrate-jsp` | Migrate a JSP/Java template set to a JS module (audit → 3 scope questions → tag-by-tag port → companion Java bundle) — from @jahia/agentic |
 | `/jahia-dev-debug` | Debug build/deploy/runtime errors end-to-end |
 
 ### Content Management

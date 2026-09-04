@@ -43,6 +43,7 @@ If you are an AI agent, this is the second file you read after [`../CLAUDE.md`](
 | [`/jahia-review-code`](skills/jahia-review-code/SKILL.md) | Code review: critical checks, warnings, suggestions |
 | [`/jahia-review-site`](skills/jahia-review-site/SKILL.md) | a11y (axe full ruleset) + SEO (Lighthouse) gate — writes `pages.json` on pass |
 | [`/jahia-dev-screenshot`](skills/jahia-dev-screenshot/SKILL.md) | Screenshot reference + Jahia render for visual comparison |
+| [`/jahia-dev-migrate-jsp`](skills/jahia-dev-migrate-jsp/SKILL.md) | Migrate a JSP/Java template set to a JS module: audit tiers, 3 scope questions, tag-by-tag port, companion Java bundle for the non-portable remainder ⟵ agentic v0.6.0 |
 | [`/jahia-dev-debug`](skills/jahia-dev-debug/SKILL.md) | Debug build/deploy/runtime errors end-to-end |
 | [`/jahia-dev-cypress`](skills/jahia-dev-cypress/SKILL.md) | Scaffold and write Cypress e2e tests: directory setup, site seed/teardown, addNode, CSS Module selectors, three mandatory spec files |
 

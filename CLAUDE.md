@@ -277,6 +277,7 @@ The full harness index is at [`.agents/README.md`](.agents/README.md). Quick ref
 | `/jahia-review-code` | Code review: 12 critical checks, 9 warnings, 11 suggestions |
 | `/jahia-review-site` | a11y (full axe ruleset) + SEO (Lighthouse audits) gate — reads `pages-to-review.json`, writes `pages.json` only on pass ⟵ agentic |
 | `/jahia-dev-screenshot` | Visual comparison: reference vs Jahia render |
+| `/jahia-dev-migrate-jsp` | Migrate a JSP/Java template set to a JS module: audit portable tiers first, ask 3 scope questions (CSS / client JS / Java remainder), port tag-by-tag, keep a companion Java bundle for skins, `moduleMap`, initializers, filters ⟵ agentic |
 | `/jahia-dev-debug` | Debug build/deploy/runtime errors |
 | `/jahia-dev-cypress` | Scaffold Cypress e2e tests for any new component |
 

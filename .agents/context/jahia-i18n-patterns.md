@@ -200,10 +200,14 @@ t("form.contact.sendMessageError", { name, status })
 **Usage in views** (`useTranslation` from `react-i18next`):
 
 ```tsx
-// Works in both .server.tsx and .client.tsx
 import { useTranslation } from "react-i18next";
 
+// Server views may use the bare form - the engine sets the namespace synchronously
+// around each server render.
 const { t } = useTranslation();
+
+// Client islands MUST name the module namespace explicitly (see "Namespace in Islands").
+const { t } = useTranslation("<module-name>");
 
 // Simple key
 <button>{t("section.contact.btn")}</button>
@@ -255,14 +259,32 @@ function buildEstateRows(estate: EstateProps, t: TFunction) {
   ];
 }
 
-// In the component
+// In the component (server view; in a client island: useTranslation("<module-name>"))
 const { t } = useTranslation();
 const rows = buildEstateRows(estate, t);
 ```
 
-### Locale in Islands — No Prop Needed
+### Namespace in Islands — Always Bind It Explicitly
 
-`useTranslation()` inside a client component (`.client.tsx`) **automatically** picks up the correct locale. The `@jahia/javascript-modules-library` initializes i18next with the current page language before hydration — you do not need to pass `locale` or `language` as a prop to Islands for translation purposes.
+In a client island (`.client.tsx`), always pass the module name as the namespace:
+`const { t } = useTranslation("<module-name>")`. The bare `useTranslation()` form is a
+race that shows raw keys on some page loads and not others.
+
+Why: the engine emits one `<script data-i18n-store="<module-name>">` per module present on
+the page, loads them all into a single shared i18next instance, and then calls
+`i18next.setDefaultNamespace(bundle)` inside the render function of each island's hydration
+wrapper. Island bundles are loaded through dynamic `import()`, so their hydration order
+follows network completion order, and each island renders into its own React root. On a page
+mixing islands from several modules, the global default namespace at the moment a given
+island's `useTranslation()` binds can belong to a different module - and there is no
+`fallbackNS`, so every key resolves to itself. Reloading reshuffles the order, which is why
+the symptom looks intermittent and "goes away after a few reloads".
+
+Naming the namespace makes the lookup independent of that global. The namespace is the Jahia
+module name (`package.json` → `jahia.name`), which is exactly the `data-i18n-store` value.
+
+The **locale** is handled for you: the engine calls `changeLanguage()` with the page language
+before hydration, so you never pass `locale` or `language` as a prop for translation purposes.
 
 ```tsx
 // ✅ Server — pass only data props, never a "locale" prop for translations
@@ -273,9 +295,9 @@ return (
   />
 );
 
-// ✅ Client — useTranslation() works without receiving locale as a prop
+// ✅ Client — namespace named explicitly; locale still needs no prop
 export default function SearchEstateFormClient({ params, onChange }) {
-  const { t } = useTranslation();  // correct locale injected by i18next context
+  const { t } = useTranslation("my-module");  // namespace pinned, locale automatic
   return <button>{t("form.estate.submit")}</button>;
 }
 ```
@@ -289,7 +311,7 @@ const locale = currentResource.getLocale().getLanguage();
 
 // Client
 export default function PriceClient({ price, locale }: { price: number; locale: string }) {
-  const { t } = useTranslation();                          // translations — automatic
+  const { t } = useTranslation("my-module");               // namespace pinned explicitly
   return <span>{price.toLocaleString(locale)}€</span>;     // formatting — needs locale prop
 }
 ```
@@ -349,7 +371,7 @@ Labels in registry entries always use the `'module-name:key'` format — the mod
 |---|---|---|
 | **CND / editor labels** | `settings/resources/<module>.properties` | `src/main/resources/resources/<artifact>.properties` |
 | **Front-end UI labels** | `settings/locales/en.json`, `fr.json` | n/a — use `.properties` for everything |
-| **React usage** | `useTranslation()` → `t("key")` | `'module:label.key'` in registry entries |
+| **React usage** | `useTranslation("<module>")` → `t("key")` (bare form only in server views) | `'module:label.key'` in registry entries |
 | **Loading** | Automatic (`@jahia/vite-plugin`) | `window.jahia.i18n.loadNamespaces('module')` |
 | **Minimum locales** | EN + FR `.properties` + EN + FR `.json` | EN + FR `.properties` |
 

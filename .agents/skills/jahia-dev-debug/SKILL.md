@@ -211,3 +211,23 @@ Carousels using Swiffy Slider, Swiper, etc. show only slide 0 in SSR without JS.
   {items.map(item => <li key={item.getPath()}>...</li>)}
 </ul>
 ```
+
+## Module lifecycle traps (proven on 8.2.3.2, 2026-09-03)
+
+- **Never `_uninstall` the last installed version of a module on an instance that has content.**
+  Jahia removes the module from every site and deletes the nodes of its types that sit in pages.
+  Deploying a higher version upgrades in place and keeps content; bump the version instead.
+- **Maven module replaced by a JS module of the same name**: the JS bundle can stall in
+  `moduleState=STARTING` ("A different Jahia Module with the Id X already exists", "has not yet
+  been parsed. Delaying its startup"); every JS view then 500s with `JSView.getModule() is null`.
+  Stop + uninstall the stuck JS bundle and redeploy once the Maven one is gone.
+- Module manager REST (`_stop`/`_start`/`_uninstall`) needs
+  `-X POST -H 'Content-Type: application/x-www-form-urlencoded'`; `_info` shows the Jahia-level
+  `moduleState` (an OSGi ACTIVE `_localState` proves nothing).
+- `ERROR_WITH_DEFINITIONS` with `failed to register namespace <p> -> <uri>` for a prefix your CND
+  never declares means the instance's in-memory namespace map is poisoned by another module; every
+  deploy fails until `NodeTypeRegistry.getInstance().getNamespaces().remove("<p>")` runs through
+  the provisioning API's Groovy `executeScript` (then bump the version so the CND is re-read).
+- The JS engine's CND reader wants every prefix declared (`mix`, `wemmix` included) and
+  `static-resources` must list `/icons` for content-type icons. Jahia's log is
+  `/var/log/jahia/jahia.log` inside the container, not `docker logs`.
