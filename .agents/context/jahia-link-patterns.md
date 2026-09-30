@@ -27,7 +27,29 @@ The `linkTypeInitializer` selector drives a UI in the content editor. When the e
 | `external` | `jmix:externalLink` | `j:url` | `string`, **i18n** (locale-dependent) |
 | `none` | _(none)_ | _(none)_ | — |
 
-> `j:url` is **i18n**. The JCR session is already locale-aware — `getProperty("j:url").getString()` returns the correct translated URL automatically.
+> **Both targets are i18n**: `j:url` *and* `j:linknode` (verified on 8.2.3.2: `j:linknode` is an
+> internationalized WEAKREFERENCE constrained to `jmix:droppableContent`, `jnt:page`,
+> `jmix:mainResource`). The JCR session is locale-aware, so reading them returns the current
+> language's value. Consequence: **a link is set per language.** `j:linkType` itself is not i18n,
+> so an item linked in EN only still says `internal` in FR but has no target there: render the
+> label without a link (never `href="#"`), and show an edit-mode hint so editors notice.
+
+### Verified on Jahia 8.2.3.2 (2026-09-30 spike)
+
+| Shape | Content Editor | GraphQL write | Live render |
+|---|---|---|---|
+| choicelist on a shared **module mixin** (`[ns:linkTo] mixin` + `- j:linkType (string, choicelist[linkTypeInitializer,resourceBundle]) = 'none' autocreated indexed=no`) | values `none` / `internal` (`addMixin jmix:internalLink` → page picker `j:linknode`) / `external` (`addMixin jmix:externalLink` → `j:url` + `j:linkTitle`) | works | works |
+| choicelist declared **on the type itself** (mysoprahr `footerLink` shape) | same | works | works |
+
+Both shapes store internal and external links on module types (extending `jnt:content`); the
+`extends=` of the core link mixins does not exclude them. The earlier belief that "the mixin does not
+stick on module types" (tenant-portal's `tnpmix:cta` comment) came from writing `j:linknode`
+**without a language**: GraphQL answers `ConstraintViolationException: no matching property
+definition found for {http://www.jahia.org/jahia/1.0}linknode`, and the `addMixins` in the same
+mutation, although reported as successful, is rolled back with it.
+
+`jmix:externalLink` puts **no constraint on `j:url`**: `javascript:` URLs are storable. Resolve
+external links through a helper that allow-lists schemes (`http`, `https`, `mailto`, `tel`).
 
 ---
 
@@ -123,7 +145,7 @@ mutation {
       addMixins(mixins: ["jmix:internalLink"])
       setPropertiesBatch(properties: [
         { name: "ctaType", value: "internal" }
-        { name: "j:linknode", value: "/sites/SITE/home/target-page", type: WEAKREFERENCE }
+        { name: "j:linknode", value: "<target page uuid>", type: WEAKREFERENCE, language: "en" }
       ]) { path }
     }
   }
@@ -146,6 +168,8 @@ mutation {
 ```
 
 > Always set `ctaType` alongside the mixin so the content editor shows the correct UI state.
+> Always pass `language` for `j:linknode` and `j:url` (repeat per language): without it the write is
+> rejected and the whole mutation, `addMixins` included, is rolled back.
 
 ---
 

@@ -121,6 +121,7 @@ Our value-add beyond the JS-only reference harness:
 ## Candidate upstream contributions
 
 - `check-cnd.mjs`: ignore directive + name-scoped missingI18n (from our datatable session).
+- `check-cnd.mjs`: cross-file `namespaceUriMismatch` rule (a prefix bound to two URIs silently fails the JS-module install; found on the classic-templates link spike, 2026-09-30).
 - `jahia-review-site` Step 1: missing `lighthouse` in the install command (script imports it).
 - `jahia-review-code`: our C9–C12 critical checks + W10 locale-sync check; W3 correction
   (`jmix:hiddenType` only on singleton absolute-area types, never on orderable-list children).

@@ -74,6 +74,15 @@ Property named `title`, `heroTitle`, `pageTitle`, or `sectionTitle` typed as `(s
 User-visible string (`title`, `text`, `label`, `description`, `subtitle`, `caption`, `alt`, `heading`, `summary`, `excerpt`, `body`) without `i18n`.
 **Fix**: Add `i18n` after the type declaration.
 
+### `namespaceUriMismatch`
+The same prefix bound to two different URIs in two CND files of the module (typically
+`settings/definitions.cnd` still on the scaffold's `https://example.com/...` URI while a component
+CND uses the real one). The JS engine merges every CND into one file at install time and rejects
+it: the install fails with a bare `IOException`, `yarn jahia-deploy` prints `{}`, and no type
+appears. Cross-file check, so run the checker on the module root.
+**Fix**: one URI per prefix everywhere, or declare the namespaces only in `settings/definitions.cnd`
+(component CNDs then start directly with their `[ns:type]` blocks, as luxe-jahia-demo does).
+
 ### `studioOnly`
 Any use of `jmix:studioOnly`.
 **Fix**: Replace with `jmix:hiddenType`.

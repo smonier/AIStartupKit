@@ -236,6 +236,12 @@ Carousels using Swiffy Slider, Swiper, etc. show only slide 0 in SSR without JS.
   never declares means the instance's in-memory namespace map is poisoned by another module; every
   deploy fails until `NodeTypeRegistry.getInstance().getNamespaces().remove("<p>")` runs through
   the provisioning API's Groovy `executeScript` (then bump the version so the CND is re-read).
+- **`yarn jahia-deploy` prints `{}` and the module never appears** = the install failed. In
+  `/var/log/jahia/jahia.log`: `JavascriptProtocolConnection: Extracting node types from
+  .../definitions<n>.cnd` immediately followed by `InstallModule: Cannot install package.tgz =
+  java.io.IOException` (the "maven repositories" wording is misleading). The engine merges all of
+  the module's CND files into one; a prefix bound to two different URIs across files is enough to
+  break it (`check-cnd.mjs` rule `namespaceUriMismatch`). Bisect by moving component CNDs aside.
 - The JS engine's CND reader wants every prefix declared (`mix`, `wemmix` included) and
   `static-resources` must list `/icons` for content-type icons. Jahia's log is
   `/var/log/jahia/jahia.log` inside the container, not `docker logs`.

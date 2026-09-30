@@ -179,18 +179,49 @@ function checkFile(filePath, content) {
   );
 }
 
+// namespaceUriMismatch: a JS module's CND files are merged into one definitions file at install
+// time. A prefix bound to two different URIs across files (e.g. settings/definitions.cnd still on
+// the scaffold's https://example.com URI, a component CND on the real one) makes the install fail
+// with a bare IOException - `yarn jahia-deploy` prints `{}` and the module never appears.
+function checkNamespaceUris(entries) {
+  const issues = [];
+  const firstSeen = new Map();
+  for (const { file, content } of entries) {
+    content.split("\n").forEach((line, i) => {
+      const decl = line.trim().match(/^<\s*([A-Za-z][\w-]*)\s*=\s*'([^']*)'\s*>/);
+      if (!decl) return;
+      const [, prefix, uri] = decl;
+      const seen = firstSeen.get(prefix);
+      if (!seen) {
+        firstSeen.set(prefix, { uri, file, line: i + 1 });
+      } else if (seen.uri !== uri) {
+        issues.push({
+          file, line: i + 1,
+          pattern: "namespaceUriMismatch",
+          message: `prefix "${prefix}" is bound to '${uri}' here but to '${seen.uri}' in ${seen.file}:${seen.line}`,
+          fix: "Use exactly the same URI for a prefix in every CND file of the module (or declare namespaces only in settings/definitions.cnd)",
+        });
+      }
+    });
+  }
+  return issues;
+}
+
 export function checkCndFiles(projectDir) {
   const files = findCndFiles(projectDir);
   const allIssues = [];
+  const entries = [];
 
   for (const file of files) {
     try {
       const content = readFileSync(file, "utf-8");
+      entries.push({ file, content });
       allIssues.push(...checkFile(file, content));
     } catch {
       // skip unreadable files
     }
   }
+  allIssues.push(...checkNamespaceUris(entries));
 
   return { score: Math.exp(-allIssues.length * 0.5), issues: allIssues, filesChecked: files.length };
 }
