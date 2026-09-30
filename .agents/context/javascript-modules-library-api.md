@@ -26,6 +26,10 @@ jahiaComponent(
 )
 ```
 
+`properties` also accepts `"cache.mainResource": "true"`: the fragment's cache key then includes the
+main resource. Use it for the few per-page parts of shared chrome (a language switcher linking to
+the current page in other languages); verified on 8.2.3.2.
+
 The `props` object is a **Proxy** built by `getNodeProps(currentNode)` — property reads are lazy JCR calls. All props use `?:` optional types regardless of CND `mandatory` status.
 
 **Auto-generated component ID**: `${bundleKey}_${componentType}_${nodeType}_${name}` — used internally by the engine.
@@ -208,24 +212,32 @@ Editorial drop zone — scoped to the current page. Default `nodeType` is `"jnt:
 
 Like Area but shared across pages. `parent` is the node that OWNS the area node.
 
-> 🚨 **Parent shared header/footer on the home page, never on `renderContext.getSite()`.** The site node is not a page: Page Builder never offers it, so an area parented there renders everywhere and is editable nowhere. Use `site.getNode("home")` (fall back to the site only while home does not exist). Proven on tenant-portal, 2026-09-22; existing content is fixed with `mutateNode.move` + publish.
+> 🚨 **Parent shared header/footer on the home page, never on `renderContext.getSite()`.** The site node is not a page: Page Builder never offers it, so an area parented there renders everywhere and is editable nowhere. Use `site.getHome()` (fall back to the site only while home does not exist). Proven on tenant-portal, 2026-09-22; existing content is fixed with `mutateNode.move` + publish.
 
-The `readOnly` prop has three modes:
+The `readOnly` prop, as it actually behaves (checked in the Page Builder edit frame, engine 1.2.0 on
+Jahia 8.2.3.2). The engine maps `"children"` to core's `limitedAbsoluteAreaEdit`, and the library's
+doc comment ("read-only except on the page containing its node") does not match what happens:
+
+| `readOnly` | Area marker | Children editable | Where |
+|---|---|---|---|
+| `false` (default) | yes | yes | every page |
+| `true` | no | **yes** (children keep their module markers) | every page |
+| `"children"` | no | no | **every page, home included** |
+
+So "edit the header from the home page only" is computed per page:
 
 ```tsx
-const home = renderContext.getSite().getNode("home");
+const { renderContext, mainNode } = useServerContext();
+const home = renderContext.getSite().getHome();
+const readOnly = mainNode.getPath() === home.getPath() ? false : "children";
 
-// Fully read-only everywhere (no editing at all)
-<AbsoluteArea name="siteFooter" parent={home} readOnly={true} />
-
-// Read-only everywhere EXCEPT the page that owns the area node (here: the home page)
-<AbsoluteArea name="siteFooter" parent={home} readOnly="children" />
-
-// Fully editable (default)
-<AbsoluteArea name="siteFooter" parent={home} />
+<AbsoluteArea name="siteFooter" parent={home} nodeType="ns:footerArea" readOnly={readOnly} />
 ```
 
-`readOnly="children"` is the recommended pattern for footers and headers — editors modify them from the home page only, preventing accidental edits elsewhere.
+Verify with the edit frame (`/cms/editframe/default/<lang>/sites/<site>/<page>.html` with a
+session): on home the area shows `jahiatype="module" ... type="absoluteArea"`; on any other page
+no marker under the area path at all. Rendering the chrome in the edit frame is not proof that it
+is editable.
 
 ---
 
@@ -238,6 +250,11 @@ Injects CSS or JS resources into `<head>` or `<body>`. Deduplicates by `key`.
 <AddResources type="javascript" resources={buildModuleFileUrl("js/analytics.js")} key="my-module-js" />
 ```
 
+> Scripts shipped in the module's `static/` folder load the same way:
+> `<AddResources type="javascript" resources={buildModuleFileUrl("static/js/navigation.js")} key="ns-navigation" />`
+> (with `/static` in `jahia.static-resources`). Prefer that to an inline `<script>`, which needs
+> `dangerouslySetInnerHTML` and is always flagged by jahia-security-scan R10.
+>
 > **CRITICAL**: The prop is `resources` (not `url`). Passing `url` silently does nothing — TypeScript will error if strict. **Always** wrap the path with `buildModuleFileUrl()` — a bare string like `"dist/assets/style.css"` does not resolve to the correct module-scoped URL at runtime and the resource will never load. The `key` prop is required for deduplication when the same component can be placed multiple times on a page.
 
 ---

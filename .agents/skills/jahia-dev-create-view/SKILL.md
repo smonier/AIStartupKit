@@ -550,17 +550,17 @@ Use `readOnly` when rendering a node that editors should not edit in-place (e.g.
 <RenderChild name="footer" readOnly={true} />
 ```
 
-For `AbsoluteArea`, use `readOnly="children"` to allow editing only from the owning page:
+For `AbsoluteArea`, "editable from one page only" is computed per page (engine 1.2.0 / Jahia 8.2.3.2:
+`readOnly="children"` alone locks the area and its children on every page, home included, and
+`readOnly={true}` leaves the children editable):
 
 ```tsx
-// Fully read-only — editors cannot edit the footer from any page
-<AbsoluteArea name="footer" parent={renderContext.getSite()} readOnly={true} />
-
-// Read-only everywhere EXCEPT the designated "footer management" page
-<AbsoluteArea name="footer" parent={renderContext.getSite()} readOnly="children" />
+const home = renderContext.getSite().getHome(); // owner of the shared chrome - never the site node
+const readOnly = mainNode.getPath() === home.getPath() ? false : "children";
+<AbsoluteArea name="footer" parent={home} readOnly={readOnly} />
 ```
 
-`readOnly="children"` is the recommended pattern: the footer is manageable from one page, but other page templates just include it without showing edit handles.
+See `javascript-modules-library-api.md` (AbsoluteArea) for the verified behaviour table.
 
 ---
 

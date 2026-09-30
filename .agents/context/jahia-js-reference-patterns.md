@@ -222,13 +222,17 @@ interface LayoutProps {
 }
 
 export function Layout({ head, className, children }: LayoutProps) {
-  const { renderContext } = useServerContext();
+  const { renderContext, mainNode } = useServerContext();
+  const owner = chromeOwner(renderContext);
+  // Editable on home, locked (children included) elsewhere: readOnly="children" alone locks
+  // every page, home included (engine 1.2.0 / Jahia 8.2.3.2).
+  const readOnly = mainNode.getPath() === owner.getPath() ? false : "children";
   return (
     <html lang={renderContext.getMainResourceLocale().getLanguage()}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <AddResources type="css" url={buildModuleFileUrl("assets/index.css")} />
+        <AddResources type="css" resources={buildModuleFileUrl("assets/index.css")} />
         <SeoMetaTags />
         {head}
       </head>
@@ -236,11 +240,11 @@ export function Layout({ head, className, children }: LayoutProps) {
         <a href="#main-content" className={classes.skipLink}>Skip to content</a>
         {/* Owned by the home page, not the site node: the site node is never offered by Page
             Builder, so chrome parented there could not be edited from the UI. */}
-        <AbsoluteArea name="header" parent={chromeOwner(renderContext)} readOnly="children" />
+        <AbsoluteArea name="header" parent={owner} readOnly={readOnly} />
         <main id="main-content" className={className}>
           {children}
         </main>
-        <AbsoluteArea name="footer" parent={chromeOwner(renderContext)} readOnly="children" />
+        <AbsoluteArea name="footer" parent={owner} readOnly={readOnly} />
       </body>
     </html>
   );

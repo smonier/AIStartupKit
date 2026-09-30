@@ -4,6 +4,39 @@ Navigation in Jahia must be **JCR-driven and CMS-editable** — never hardcoded.
 
 ---
 
+## Verified in production-like conditions (classic-templates, 2026-09-30, Jahia 8.2.3.2)
+
+Read these first; they override the older examples further down where they disagree.
+
+- **The header is ONE cached fragment shared by every page.** It sits in an AbsoluteArea, so
+  anything computed from `mainNode` inside it (active item, `aria-current`) is baked into the cache
+  for whichever page rendered it first. Mark the current page in the browser: compare each link's
+  pathname with `location.pathname`, set `aria-current="page"`, and flag ancestors with a
+  `data-active` attribute. Style `[aria-current="page"]` / `[data-active]`, never a class a script
+  sets (CSS module names are hashed).
+- **Per-page parts of the header** (the language switcher, whose links point to *this* page in the
+  other languages) declare `properties: { "cache.mainResource": "true" }` on their view: the cache
+  key then includes the main resource. Verified: each page gets its own links.
+- **Use the disclosure pattern, not ARIA `role="menu"`.** Site navigation is a list of links:
+  level-1 link + a sibling `<button aria-expanded aria-controls>` that opens its panel. No
+  `menu`/`menuitem` roles, no arrow-key trapping. Escape closes and returns focus to the button;
+  focus leaving the item or a click outside closes it; hover-opened panels are dismissable with
+  Escape (WCAG 1.4.13).
+- **Ship the behaviour as a static file, not an inline script.** `static/js/navigation.js` loaded
+  with `<AddResources type="javascript" resources={buildModuleFileUrl("static/js/navigation.js")} key="..." />`
+  (`/static` listed in `jahia.static-resources`). An inline `<script>` needs
+  `dangerouslySetInnerHTML`, which jahia-security-scan rule R10 always flags.
+- **Usable without JavaScript:** server-render every level; on large screens CSS opens panels on
+  hover and `:focus-within` only while `html` lacks the script's `ctpl-js`-style class; on small
+  screens every level is listed. With the script, a menu button collapses the list.
+- **Cache dependency on the tree:** `server.render.addCacheDependency({ flushOnPathMatchingRegexp:
+  `${home.getPath()}(/.*)?` }, renderContext)` so adding, renaming, reordering or hiding a page
+  refreshes the cached menu.
+- **External menu items** (`jnt:externalLink`) go through the same scheme allow-list as contributed
+  links (`http`, `https`, `mailto`, `tel`); anything else becomes a plain label.
+- Reference implementation: `classic-templates` `src/lib/navigation.ts`,
+  `src/components/Navigation/MainNavigation/`, `static/js/navigation.js`.
+
 ## Core Rules
 
 1. **Never hardcode nav items.** Use `getChildNodes` filtered by `jmix:navMenuItem` to read the live page tree. Editors can reorder, rename, or add pages without touching code.
@@ -383,7 +416,9 @@ Rules:
 | Hardcoded `["en", "fr"]` for language switcher | Use `getSiteLocales()` |
 | `buildNodeUrl(mainResource.getNode())` without `{ language }` | Add `{ language: langCode }` option |
 | Nav and hamburger in same component requiring shared state | Keep in separate components, use `data-*` attributes |
-| Using `<Island>` for the toggle script | Use a small `dangerouslySetInnerHTML` inline script |
+| Using `<Island>` for the toggle script | Ship a static JS file with `AddResources` (an inline script needs `dangerouslySetInnerHTML`, flagged by security-scan R10) |
+| Active item computed from `mainNode` in the header | The header fragment is shared and cached: set `aria-current` in the browser |
+| `role="menu"` / `menuitem` on site navigation | Disclosure pattern: link + `<button aria-expanded aria-controls>` |
 | Putting nav inside `SiteHeader` TSX | Separate `MainNavigation` node in the header area |
 
 ---
@@ -393,11 +428,12 @@ Rules:
 - [ ] `definition.cnd` uses a mixin inheriting `jmix:droppableContent`
 - [ ] Nav items filtered by `jmix:navMenuItem`, excluding `jmix:navMenu`
 - [ ] All 4 item types handled: `jnt:page`, `jnt:navMenuText`, `jnt:nodeLink`, `jnt:externalLink`
-- [ ] Active state checks `mainNode.getPath()` and `startsWith(path + "/")`
+- [ ] Active state set in the browser (`aria-current="page"` + `data-active` ancestors), not from `mainNode`
+- [ ] Language switcher view has `cache.mainResource: "true"`
 - [ ] Language switcher uses `getSiteLocales()` — never hardcoded locale codes
 - [ ] `#main-nav` has `data-expanded="false"` for CSS targeting
 - [ ] Hamburger button in SiteHeader has `data-mobile-nav-toggle`
 - [ ] Content node created and published in JCR after deploy
-- [ ] Dropdown triggers have `aria-haspopup="true"` and `aria-expanded` reflecting open state
-- [ ] Keyboard: Escape closes dropdown and returns focus to trigger; Arrow Down opens and focuses first item
+- [ ] Submenu buttons have `aria-expanded` + `aria-controls` (disclosure pattern, no `role="menu"`)
+- [ ] Keyboard: Escape closes the submenu and returns focus to its button; focus leaving the item closes it
 - [ ] Active nav item uses `aria-current="page"` (not `aria-selected` or CSS class alone)

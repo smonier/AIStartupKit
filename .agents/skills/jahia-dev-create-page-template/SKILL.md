@@ -27,20 +27,22 @@ jahiaComponent(
     displayName: "Single Column",
     name: "singleColumn",        // used in Jahia UI when selecting a template
   },
-  ({ "jcr:title": title }, { renderContext }) => {
+  ({ "jcr:title": title }, { renderContext, mainNode }) => {
     // Shared chrome is OWNED BY THE HOME PAGE, never by the site node - see Step 2.
     const site = renderContext.getSite();
     let owner = site;
-    try { owner = site.getNode("home"); } catch { /* site being created: no home yet */ }
+    try { owner = site.getHome() ?? site; } catch { /* site being created: no home yet */ }
+    // Editable on home, locked (children included) everywhere else - see Step 2.
+    const readOnly = mainNode.getPath() === owner.getPath() ? false : "children";
 
     return (
       <Layout title={title}>
-        <AbsoluteArea name="siteHeader" parent={owner} nodeType="namespace:pageArea" readOnly="children" />
+        <AbsoluteArea name="siteHeader" parent={owner} nodeType="namespace:pageArea" readOnly={readOnly} />
         <main id="main-content" style={{ maxWidth: "40rem", margin: "0 auto" }}>
           <h1>{title}</h1>{/* the ONE h1 of the page - components start at h2 */}
           <Area name="main" />
         </main>
-        <AbsoluteArea name="siteFooter" parent={owner} nodeType="namespace:pageArea" readOnly="children" />
+        <AbsoluteArea name="siteFooter" parent={owner} nodeType="namespace:pageArea" readOnly={readOnly} />
       </Layout>
     );
   },
@@ -101,7 +103,9 @@ export const Layout = ({ title, children }: { title?: string; children: ReactNod
 | Use for | Page body, hero, sections | Footer, navbar, sidebar |
 | `parent` prop | Not needed | **The home page node** (`site.getNode("home")`), never the site node - see below |
 
-> 🚨 **Parent shared areas on the HOME PAGE, not on `renderContext.getSite()`.** The site node renders on every page, but it is not a page, so Page Builder never offers it: a header or footer parented there **cannot be edited from the UI at all** - every change goes through a script (found on tenant-portal, 2026-09-22). Owned by the home page, the area still renders on every page, an editor changes it by opening the home page, and `readOnly="children"` makes it read-only everywhere else. Fall back to the site node only while the home page does not exist yet.
+> 🚨 **Parent shared areas on the HOME PAGE, not on `renderContext.getSite()`.** The site node renders on every page, but it is not a page, so Page Builder never offers it: a header or footer parented there **cannot be edited from the UI at all** - every change goes through a script (found on tenant-portal, 2026-09-22). Owned by the home page, the area still renders on every page and an editor changes it by opening the home page. Fall back to the site node only while the home page does not exist yet.
+
+> 🚨 **`readOnly="children"` does not mean "editable on home".** With engine 1.2.0 on Jahia 8.2.3.2 it locks the area and its children on **every** page, home included, and `readOnly={true}` only hides the area's own marker while its children stay editable (classic-templates, 2026-09-30; tenant-portal had only checked that the chrome *renders* in the edit frame). Compute it: `readOnly={mainNode.getPath() === home.getPath() ? false : "children"}`. Verify editability, not rendering: the home edit frame must contain `jahiatype="module"` with `type="absoluteArea"` for the area path, a sub-page none.
 
 ---
 
@@ -294,10 +298,11 @@ After deploying, the new template will appear in the **template selection** step
 ### Single column with shared footer
 
 ```tsx
-const home = renderContext.getSite().getNode("home"); // the owner of shared chrome
+const home = renderContext.getSite().getHome(); // the owner of shared chrome
+const readOnly = mainNode.getPath() === home.getPath() ? false : "children";
 <Layout title={title}>
   <Area name="main" />
-  <AbsoluteArea name="siteFooter" parent={home} nodeType="namespace:pageArea" readOnly="children" />
+  <AbsoluteArea name="siteFooter" parent={home} nodeType="namespace:pageArea" readOnly={readOnly} />
 </Layout>
 ```
 
@@ -315,14 +320,15 @@ const home = renderContext.getSite().getNode("home"); // the owner of shared chr
 ### Edit mode-aware rendering
 
 ```tsx
-({ "jcr:title": title }, { renderContext }) => {
+({ "jcr:title": title }, { renderContext, mainNode }) => {
   const isEdit = renderContext.isEditMode();
-  const home = renderContext.getSite().getNode("home"); // the owner of shared chrome
+  const home = renderContext.getSite().getHome(); // the owner of shared chrome
+  const readOnly = mainNode.getPath() === home.getPath() ? false : "children";
   return (
     <Layout title={title}>
       <Area name="main" />
       <nav style={{ flexDirection: isEdit ? "column" : "row" }}>
-        <AbsoluteArea name="siteFooter" parent={home} readOnly="children" />
+        <AbsoluteArea name="siteFooter" parent={home} readOnly={readOnly} />
       </nav>
     </Layout>
   );
@@ -337,7 +343,8 @@ const home = renderContext.getSite().getNode("home"); // the owner of shared chr
 - [ ] `name` is set (used in Jahia UI template picker)
 - [ ] Areas use a custom area node type (not bare `<Area name="..."/>`)
 - [ ] Custom area type has `jmix:list`, `jmix:hiddenType`, and `orderable`
-- [ ] `AbsoluteArea` for shared chrome uses the **home page** as parent (`site.getNode("home")`), with `readOnly="children"`, never the site node
+- [ ] `AbsoluteArea` for shared chrome uses the **home page** as parent (`site.getHome()`), never the site node, with `readOnly` computed per page (`false` on home, `"children"` elsewhere)
+- [ ] Edit frame checked: area markers on home, none under the area path on a sub-page
 - [ ] `<title>` is "page | site" (`site.getTitle()`, the native `j:title`), `<html lang>` from the rendering locale
 - [ ] `<meta name="description">` on every page (page `jcr:description`, else the site's `j:description`)
 - [ ] Layout declares a cache dependency on the site node if it renders anything read from it
@@ -357,7 +364,7 @@ const home = renderContext.getSite().getNode("home"); // the owner of shared chr
 
 **Root cause:** the `AbsoluteArea` is parented on `renderContext.getSite()`. The site node is not a page, so Page Builder never opens it.
 
-**Fix (code):** parent on the home page - `site.getNode("home")`, falling back to the site only while home does not exist - and keep `readOnly="children"`.
+**Fix (code):** parent on the home page - `site.getHome()`, falling back to the site only while home does not exist - with `readOnly` computed per page (`false` on home, `"children"` elsewhere, see Step 2).
 
 **Fix (existing content):** move the two area nodes under home and publish them:
 

@@ -61,7 +61,7 @@ When migrating an existing website to Jahia or building a module inspired by an 
 
 17. **Always add `ui.tooltip` to every resource bundle entry** — every property key in `.properties` files must have a companion `ui.tooltip` key with a plain-language description for editors.
 
-18. **Shared header/footer `AbsoluteArea`s are parented on the home page, never on the site node** — `parent={site.getNode("home")}` (fall back to the site only while home does not exist), `readOnly="children"`. The site node is not a page, so Page Builder never offers it: chrome parented there renders on every page and is editable on none. Seed `siteHeader`/`siteFooter` under `<home>` in `import.xml`; fix existing sites with `mutateNode.move` + publish (live follows ~40 s later on Jahia Cloud).
+18. **Shared header/footer `AbsoluteArea`s are parented on the home page, never on the site node** — `parent={site.getHome()}` (fall back to the site only while home does not exist), and `readOnly={mainNode.getPath() === home.getPath() ? false : "children"}` - editable on home, locked (children included) everywhere else. `readOnly="children"` alone locks the area on EVERY page, home included, and `readOnly={true}` leaves the children editable (verified in the edit frame with engine 1.2.0 on Jahia 8.2.3.2, classic-templates 2026-09-30). The site node is not a page, so Page Builder never offers it: chrome parented there renders on every page and is editable on none. Seed `siteHeader`/`siteFooter` under `<home>` in `import.xml`; fix existing sites with `mutateNode.move` + publish (live follows ~40 s later on Jahia Cloud).
 
 ```properties
 ns_hero.title=Title
