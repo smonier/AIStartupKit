@@ -67,6 +67,25 @@ WHERE ISCHILDNODE(page, '/sites/luxe/home')
 
 ---
 
+### Excluding specific nodes: filter in code, not in SQL2
+
+On Jahia 8.2.3.2 `NOT ISSAMENODE(item, '/path')` is **unreliable** (verified 2026-09-30,
+classic-templates): through GraphQL `nodesByQuery` it excluded nothing, even with a single
+condition; through `getNodesByJCRQuery` it excluded only the first of two. And joining `<>`
+comparisons with `OR` is always true as soon as two nodes are excluded (the mysoprahr bug). Keep
+the query to type + `ISDESCENDANTNODE` + `ORDER BY`, then drop the excluded identifiers in code and
+fetch enough extra rows to still fill the list:
+
+```ts
+const excluded = new Set(excludeNodes.map((n) => n.getIdentifier()));
+const items = getNodesByJCRQuery(session, query, (max + excluded.size) * 2)
+  .filter((n) => !excluded.has(n.getIdentifier()) && n.hasI18N(locale)) // also skip untranslated items
+  .slice(0, max);
+```
+
+`hasI18N(locale)` matters on multilingual sites: a query returns an item that has no translation in
+the page's language, and it would render with an empty title.
+
 ## Property constraints
 
 ### Exact match

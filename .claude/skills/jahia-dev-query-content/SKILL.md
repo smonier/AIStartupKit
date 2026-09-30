@@ -123,6 +123,29 @@ This pattern powers "related articles by category", "same-tag content", or any "
 
 ---
 
+### Listing hygiene (verified on classic-templates, 2026-09-30)
+
+- **Exclusions in code, never `NOT ISSAMENODE` or `OR`-ed `<>`**: see `jahia-jcr-sql2` ("Excluding
+  specific nodes"). Filter identifiers after the query and over-fetch.
+- **Skip items not translated into the page's language** with `node.hasI18N(locale)`.
+- **Type picker without hardcoding:** give listable types a marker mixin and offer
+  `choicelist[nodetypes='nsmix:listable']` (the initializer lists the mixin's subtypes with their
+  labels; a self-referencing `nodetypes` initializer installs fine, unlike `subnodetypes`).
+- **Heading level of the items:** pass it through `Render` and read it in the item view, so cards
+  are h3 under a titled list and h2 under an untitled one (strict outline, axe `heading-order`):
+
+  ```tsx
+  <Render node={item} view="card" parameters={{ headingLevel: title ? "3" : "2" }} />
+  // item view:
+  const level = useServerContext().currentResource.getModuleParams().get("headingLevel");
+  ```
+- **Cache:** `server.render.addCacheDependency({ flushOnPathMatchingRegexp: `${startPath}(/.*)?` }, renderContext)`
+  so publishing an item under the start node refreshes the list.
+- **`jmix:renderableList`** (rule 11) adds a "Sub content view" field that is empty for a query
+  component: hide it with a Content Editor form override,
+  `settings/content-editor-forms/forms/ns_jcrQuery.json`:
+  `{"nodeType":"ns:jcrQuery","priority":2.0,"sections":[{"name":"layout","fieldSets":[{"name":"jmix:renderableList","hide":true}]}]}`.
+
 ## Step 4 — Make a content type accessible at its own URL
 
 Use `jmix:mainResource` **only** for content that needs **both a listing card AND a full detail page** (e.g. blog posts, team member profiles). Do not add it to visual composition types or navigation-only content.
