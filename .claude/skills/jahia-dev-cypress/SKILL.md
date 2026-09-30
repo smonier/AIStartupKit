@@ -465,6 +465,9 @@ createSite(SITE_KEY, {
 | Running `createSite` without first deleting — no teardown in prior run | Site creation fails because the key already exists |
 | Relying on a pre-existing site instead of seeding | Tests are not self-contained and fail on a clean Jahia instance |
 | Not wrapping login/logout in `beforeEach`/`afterEach` | Session bleeds across tests; order-dependent failures |
+| Locating elements by a translated `aria-label` (`nav[aria-label="Main navigation"]`) | Tests break when a label is reworded or tested in FR; add a stable hook (`data-testid`, `data-list-name={node.getName()}`) and assert the label separately where the language matters |
+| `Cypress.$(body).find(...)` on an edit-frame HTML string | Finds nothing (jQuery drops `<html>`/`<body>` of a full document); parse with `new DOMParser().parseFromString(body, 'text/html')` |
+| Counting a component on a page seeded with several instances | Counts drift when a later test adds one; scope to the instance (`cy.contains('[data-testid=x]', 'Its title')` or `.first()`) |
 
 ---
 

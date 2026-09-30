@@ -141,6 +141,19 @@ This pattern powers "related articles by category", "same-tag content", or any "
   ```
 - **Cache:** `server.render.addCacheDependency({ flushOnPathMatchingRegexp: `${startPath}(/.*)?` }, renderContext)`
   so publishing an item under the start node refreshes the list.
+- **Category filter:** a `(weakreference, category[autoSelectParent=false]) multiple < jnt:category`
+  field on the LIST type is a query criterion, not a category field on content (the "never declare
+  category fields" rule is about content types). Expand to subcategories in code, OR the
+  identifiers (see `jahia-jcr-sql2`, "OR conditions").
+- **A start node that no longer resolves** (deleted, not yet published): a weakreference prop comes
+  back `undefined` while `currentNode.hasProperty("startNode")` stays true. Render nothing live -
+  never fall back to the whole site - and warn in edit mode.
+- **Edit panel:** editors cannot see a query. In edit mode render a panel that states what the list
+  does and found: the settings resolved to labels (type label from `NodeTypeRegistry` via
+  `Java.type`, start path, sort, maximum, categories, excluded titles), "N shown of M matching"
+  (count up to a few hundred rows in edit mode only), what was left out (excluded, not translated
+  into the page's language), warnings, and the JCR-SQL2 string in a `<details>`. Reference:
+  classic-templates `src/components/Editorial/JcrQuery/EditPanel.tsx`.
 - **`jmix:renderableList`** (rule 11) adds a "Sub content view" field that is empty for a query
   component: hide it with a Content Editor form override,
   `settings/content-editor-forms/forms/ns_jcrQuery.json`:

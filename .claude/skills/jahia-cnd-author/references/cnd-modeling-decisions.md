@@ -72,6 +72,28 @@ Never extend anything other than `jnt:content` (or your base mixin). To add fiel
 
 Always extract to a mixin when the same set of properties appears on 2+ types.
 
+**One mixin, two ways to reuse it (the call to action).** Declare the property group once and:
+
+- put it in the **supertypes** of the types whose layout places it (a hero banner puts its button
+  under the heading);
+- make it **optional everywhere else** with `extends=` on the mixin the section types already share,
+  so editors switch it on per node ("Call to action" toggle in the edit form) and every future
+  section gets it with no CND change:
+
+```cnd
+[nsmix:cta] > nsmix:linkTo mixin
+ extends = nsmix:sectionStyle
+ - ctaLabel (string) i18n
+```
+
+A type that already has the mixin as a supertype shows no second toggle (verified with
+`forms { editForm(uuidOrPath, uiLocale, locale) }` on 8.2.3.2: `dynamic: true` fieldset on a rich
+text, `dynamic: false` on the image-and-text that inherits it). The view renders it with one helper
+that returns nothing when the mixin is off, and every section view ends with that helper. No
+separate "CTA banner" type: a text section on the accent surface with the call to action on is one.
+Pick the `extends=` target carefully: extending the base component mixin would also offer the
+button on link lists, headers and footers. Reference: classic-templates `ctplmix:cta`, `lib/Cta.tsx`.
+
 ---
 
 ## Spec template (interactive mode)

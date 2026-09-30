@@ -93,6 +93,10 @@ Fix: for every hardcoded string, add a corresponding `(string) i18n` field to th
 
 Rule: **if a human visitor can read it, a contributor must be able to edit it.**
 
+**C13 — Rich text rendered without sanitising**
+Check: any `dangerouslySetInnerHTML` fed by a `richtext` property (or any stored HTML) that does not go through an allow-list sanitizer.
+Fix: sanitise at render time in one shared component (server side: `js-xss` with an allow-list; in a client island: `DOMParser`). Do not rely on Jahia's HTML filtering - it is not active on every instance (on a local 8.2.3.2, a body saved over GraphQL kept `<script>`, `onerror` and `javascript:` and rendered them). Keep formatting, lists, tables, links, images; drop scripts, styles, frames, handlers, `class`/`style`; allow href/src only for http(s), mailto, tel, relative and `##cms-context##` (not `//host`); turn `<h1>` into `<h2>`. jahia-security-scan R10 still flags the one sink: document the justification next to it.
+
 **C8 — Generic area type used for every Area**
 Check: page templates where every `<Area>` uses the same generic area type (e.g. `nodeType="namespace:pageArea"` everywhere). This means editors see ALL `pageComponent` types as droppable options in every area — a hero section will appear as an option in a feature card grid.
 Fix: create **one typed area node per section** in `settings/definitions.cnd`, each with a tight child constraint:
@@ -163,6 +167,14 @@ Fix: add the missing keys with translations before shipping.
 Check: any `.server.tsx`, `.client.tsx`, or template file containing a literal `href="http`, `href="/"`, or `href="/en/` (except in edit-mode chrome helpers). Also flag plain string `src="http` for non-bundled assets. Also flag any content data with `j:linkType: "external"` pointing to a path that looks like an internal Jahia URL (e.g. `/sites/`, `/cms/`, `/en/`).
 Fix: **All navigable URLs must come from contributed content.** Use `j:linkType`/`j:linknode`/`j:url` props for editorial links, `buildNodeUrl(node)` for JCR node links.
 🚫 **NEVER use `j:linkType: "external"` to link to an internal Jahia page** — use `"internal"` + `j:linknode`. An external URL pointing internally breaks on environment changes, language switches, live/preview workspace toggling, and vanity URL rewrites. If no target page exists yet, omit the link; do not substitute an external workaround.
+
+**W11 — Hook called after an early return**
+Check: a view that calls a hook (`useTranslation`, `useServerContext`, a module hook like `useHeadingLevel`) below an `if (...) return null`.
+Fix: call every hook first, then return. The engine renders views as React components; a conditional hook order breaks between renders.
+
+**W12 — Missing cache dependency on a node the view reads but does not render**
+Check: a view that reads properties of a node other than `currentNode` without `<Render>`: a menu item's `jnt:nodeLink` target, category titles shown as topics, site settings read by the layout, a parent row whose title decides a heading level.
+Fix: `server.render.addCacheDependency({ node }, renderContext)` for each, or the page stays stale after that node is renamed or republished (seen with a theme change on the site node).
 
 ---
 

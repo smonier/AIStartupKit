@@ -136,6 +136,18 @@ WHERE node.[jcr:primaryType] = 'jnt:bigText'
    OR node.[jcr:primaryType] = 'jnt:article'
 ```
 
+Filtering by any of several categories works with a parenthesised OR over the multi-valued
+`j:defaultCategory` (verified on 8.2.3.2, getNodesByJCRQuery, unlike `NOT ISSAMENODE`):
+
+```sql
+WHERE ISDESCENDANTNODE(item, '/sites/x/contents/news')
+  AND (item.[j:defaultCategory] = '<uuid-1>' OR item.[j:defaultCategory] = '<uuid-2>')
+```
+
+To include subcategories, expand the selected `jnt:category` nodes to their descendants in code
+(cap the count, e.g. 200) and check every identifier against a UUID pattern before it reaches the
+query string.
+
 ---
 
 ## Ordering

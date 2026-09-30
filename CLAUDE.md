@@ -139,6 +139,7 @@ cd <project-name> && yarn install
 - Only singleton layout types (header, footer) use `jmix:hiddenType` — **never** on child node types. `jmix:hiddenType` blocks Page Builder from selecting and editing those nodes inline. Child types managed inside a list parent must be plain `jnt:content` with no hidden flag.
 - Shared header/footer `AbsoluteArea`s are **parented on the home page** (`site.getNode("home")`), never on the site node: the site node is not a page, Page Builder never offers it, and chrome parented there renders everywhere but can be edited nowhere.
 - **Never declare `j:linknode` or `j:url` in a CND** — injected by Jahia's mixins at runtime.
+- A call to action is **one shared mixin** (link + label): a supertype where the layout places it, and optional on every section through `extends = <the section mixin>`. Never redeclare a label or link field per type.
 
 ### Critical view rules
 
@@ -148,6 +149,7 @@ cd <project-name> && yarn install
 - **Never hardcode links or URLs.** All navigable links come from contributed content (`j:linkType`, `buildNodeUrl`, weakreference).
 - Interactive components (carousels, tabs) render flat in edit mode via `renderContext.isEditMode()`.
 - Client islands: component in `.client.tsx`, wrapped with `<Island>` in the server view. Props must be serializable — no JCR objects.
+- **Rich text from the repository is sanitised at render time** in one shared component (server: `js-xss` allow-list): Jahia's HTML filtering is not active on every instance, and a body saved over GraphQL can carry `<script>`, handlers and `javascript:` links that render as is.
 - HTML that comes from another system (a CRM knowledge base, mail bodies) is **data, never markup we trust**: sanitise it in the island with an allowlist (DOMParser), drop `style`/`script`/`title`/frames outright, shift headings under the block's own. Real CRM articles carried `:root{--primary…}` blocks that repaint the host.
 - Any servlet/Action answering **per-user data** sets `Cache-Control: no-store, private` itself — on Jahia Cloud a response with no cache header gets the page defaults (`public, s-maxage=600`) from the front cache.
 

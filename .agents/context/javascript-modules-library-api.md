@@ -373,6 +373,9 @@ import { getSiteLocales } from "@jahia/javascript-modules-library";
 
 const locales = getSiteLocales();
 // Returns Record<string, java.util.Locale>
+// java.util.Locale#toLanguageTag() exists at runtime but is missing from the typings: wrap it once,
+// const languageTag = (l: unknown) => (l as { toLanguageTag(): string }).toLanguageTag();
+// and use it for <html lang>, hreflang, Intl.DateTimeFormat. toString() gives "en_US" for a regional locale, not a BCP 47 tag.
 // Keys are language codes: "en", "fr", "de", ...
 ```
 
