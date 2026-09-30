@@ -158,6 +158,23 @@ const data = await resp.json();
 
 ---
 
+### Per-user responses — forbid caching yourself
+
+Any Action or servlet that answers data belonging to the signed-in user must set its own cache headers on **every** response, success and error alike. On Jahia Cloud a response with no `Cache-Control` receives the front cache's page defaults — observed as `cache-control: public, must-revalidate, max-age=1, s-maxage=600, stale-while-revalidate=15` on a per-tenant JSON endpoint: a ten-minute stale list for the user, and a URL-keyed shared cache entry for everyone else.
+
+```java
+private static void forbidCaching(HttpServletResponse response) {
+    response.setHeader("Cache-Control", "no-store, private, max-age=0");
+    response.setHeader("Pragma", "no-cache");
+    response.setHeader("Expires", "0");
+    response.setHeader("Vary", "Cookie");
+}
+```
+
+Pair it with `fetch(url, { cache: "no-store", credentials: "same-origin" })` on the client. Tell it is the edge and not Jahia: localhost carries only Jahia's own `private, no-cache, no-store`; the cloud answer carries two `cache-control` headers until you set yours.
+
+---
+
 ## When to load which reference
 
 | Task | Reference file |

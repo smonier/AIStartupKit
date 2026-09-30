@@ -113,16 +113,19 @@ Use the GraphQL API with a **multipart request** to upload files.
 
 ### Upload a single file
 
-> ⚠️ Always include `mixins: ["jmix:image"]` when uploading images. Without this mixin, the file node **cannot be used as a WEAKREFERENCE** in image properties — you will get a constraint error.
+> ⚠️ Always include `mixins: ["jmix:image"]` when uploading images. Without this mixin, the file node **cannot be used as a WEAKREFERENCE** in image properties — you will get a constraint error. Set `j:width` / `j:height` too; jContent's own uploader does, GraphQL does not.
+
+> 🚨 **The `value` of `setValue(type: BINARY, …)` is the NAME of the multipart part, as a plain string.** Do **not** add a graphql-multipart `map` part: that indirection "succeeds" (HTTP 200, a UUID comes back) but stores the literal text `org.apache.catalina.core.ApplicationPart@…` — the file then serves as a 49-byte `image/jpeg` and every `<img>` is silently broken. Read the stored size back after the mutation rather than trusting it.
 
 ```bash
 curl -s -u root:root \
   -H "Origin: http://localhost:8080" \
   -X POST http://localhost:8080/modules/graphql \
-  -F 'operations={"query":"mutation { jcr { addNode(name: \"image.jpg\", parentPathOrId: \"/sites/SITE_KEY/files\", primaryNodeType: \"jnt:file\", mixins: [\"jmix:image\"]) { addChild(name: \"jcr:content\", primaryNodeType: \"jnt:resource\") { content: mutateProperty(name: \"jcr:data\") { setValue(type: BINARY, value: \"fc\") } contentType: mutateProperty(name: \"jcr:mimeType\") { setValue(value: \"image/jpeg\") } } uuid } } }"}' \
-  -F 'map={"fc":["variables.f"]}' \
+  -F 'operations={"query":"mutation { jcr { addNode(name: \"image.jpg\", parentPathOrId: \"/sites/SITE_KEY/files\", primaryNodeType: \"jnt:file\", mixins: [\"jmix:image\"]) { uuid w: mutateProperty(name: \"j:width\") { setValue(value: \"925\") } h: mutateProperty(name: \"j:height\") { setValue(value: \"120\") } addChild(name: \"jcr:content\", primaryNodeType: \"jnt:resource\") { content: mutateProperty(name: \"jcr:data\") { setValue(type: BINARY, value: \"fc\") } contentType: mutateProperty(name: \"jcr:mimeType\") { setValue(value: \"image/jpeg\") } } } } }"}' \
   -F "fc=@/absolute/path/to/image.jpg;type=image/jpeg"
 ```
+
+Verify: `nodeByPath(path:".../image.jpg"){ descendant(relPath:"jcr:content"){ property(name:"jcr:data"){ value } } }` must not start with `org.apache.`. A scripted, re-runnable version is tenant-portal `scripts/load-logo.py`.
 
 The response contains the UUID:
 ```json
@@ -139,11 +142,11 @@ properties: [
 ]
 ```
 
-> After uploading, publish the files folder so images are accessible on the live site:
+> After uploading, publish the files folder so images are accessible on the live site. **Publishing the content that references the image does NOT publish the image** — the live page then shows a broken image with no error anywhere. And `publish` without `languages` returns `true` and publishes nothing.
 > ```bash
 > curl -s -u root:root -H "Content-Type: application/json" -H "Origin: http://localhost:8080" \
 >   -X POST http://localhost:8080/modules/graphql \
->   -d '{"query":"mutation { jcr { mutateNode(pathOrId: \"/sites/SITE_KEY/files\") { publish(languages: [\"en\"]) } } }"}'
+>   -d '{"query":"mutation { jcr { mutateNode(pathOrId: \"/sites/SITE_KEY/files\") { publish(languages: [\"en\"], publishSubNodes: true, includeSubTree: true) } } }"}'
 > ```
 
 ---

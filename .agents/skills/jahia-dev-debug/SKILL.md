@@ -212,6 +212,14 @@ Carousels using Swiffy Slider, Swiper, etc. show only slide 0 in SSR without JS.
 </ul>
 ```
 
+## Inspecting edit mode and publication from a script (2026-09-22)
+
+- **`/cms/edit/...` answers 302 even with a valid session** — it redirects to the Page Builder shell. The raw edit render is `/cms/editframe/default/{lang}/sites/SITE/path.html`. Get a session with `curl -c jar -X POST -d "username=root&password=...&restMode=true" HOST/cms/login`, then `curl -b jar HOST/cms/editframe/...`. Basic auth alone is not enough for edit mode.
+- **Jahia denies with 404, not 401** — a page the caller may not see, a live node that is not published yet, and a wrong path all read the same. Check the node in the `LIVE` workspace via GraphQL before concluding the page is missing.
+- **Publication is asynchronous, and slower on Jahia Cloud** — `publish` returns `true` before the live tree changes; after a `move` the live paths followed ~40 s later. Poll `aggregatedPublicationInfo` or the live path; a check made too early reads as a failed publish or a failed move.
+- **A browser pane can replay a stale page** after a republish. When the screen disagrees with the data, `curl` the rendered HTML from the server with `Cache-Control: no-cache` and compare before touching code.
+- **Two `cache-control` headers on a module servlet's response** means the platform's front cache added its page defaults (`public, s-maxage=600`) because the servlet set none. See `jahia-dev-java` → forbid caching.
+
 ## Module lifecycle traps (proven on 8.2.3.2, 2026-09-03)
 
 - **Never `_uninstall` the last installed version of a module on an instance that has content.**

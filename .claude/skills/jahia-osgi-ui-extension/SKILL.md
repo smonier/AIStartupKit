@@ -125,18 +125,24 @@ mvn clean install   # runs yarn build:production via frontend-maven-plugin
 ### webpack.config.js
 
 ```javascript
-const { getModuleFederationConfig } = require('@jahia/webpack-config');
-const packageJson = require('./package.json');
+const path = require('path');
+// The package ships NO index.js. Require the file directly (default export).
+// `const {getModuleFederationConfig} = require('@jahia/webpack-config')` fails at build time.
+const getModuleFederationConfig = require('@jahia/webpack-config/getModuleFederationConfig');
+const {CleanWebpackPlugin} = require('clean-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 const ModuleFederationPlugin = require('webpack/lib/container/ModuleFederationPlugin');
+const packageJson = require('./package.json');
 
 module.exports = (env, argv) => ({
     entry: { main: './src/javascript/index' },
     output: {
         path: path.join(__dirname, 'src/main/resources/javascript/apps/'),
         publicPath: 'auto',
-        filename: 'jahia.bundle.js',
-        chunkFilename: '[name].jahia.[chunkhash:6].js',
+        filename: 'my-module.bundle.js',
+        chunkFilename: '[name].my-module.[chunkhash:6].js',
     },
+    resolve: { extensions: ['.mjs', '.js', '.jsx'] },
     module: {
         rules: [
             { test: /\.(js|jsx)$/, use: 'babel-loader', exclude: /node_modules/ },
@@ -145,26 +151,62 @@ module.exports = (env, argv) => ({
         ],
     },
     plugins: [
-        new ModuleFederationPlugin(getModuleFederationConfig(packageJson)),
+        new ModuleFederationPlugin(getModuleFederationConfig(packageJson, {
+            name: 'myModule',
+            library: { type: 'assign', name: 'appShell.remotes.myModule' },
+            filename: 'remoteEntry.js',
+            exposes: { './init': './src/javascript/init' },
+            remotes: {
+                '@jahia/app-shell': 'appShellRemote',
+                '@jahia/jcontent': 'appShell.remotes.jcontent',
+            },
+            shared: {
+                react: { singleton: true, requiredVersion: packageJson.dependencies.react },
+                'react-dom': { singleton: true, requiredVersion: packageJson.dependencies['react-dom'] },
+                // Host-provided, never bundled. Without these entries any `useSelector`
+                // import fails with "Module not found: react-redux" at webpack time.
+                'react-redux': { singleton: true, import: false },
+                redux: { singleton: true, import: false },
+                '@apollo/client': { singleton: true, import: false },
+            },
+        })),
+        new CleanWebpackPlugin({ verbose: false }),
+        // app-shell discovers the remote through the "jahia.remotes" key of THIS file.
+        // Without the copy the bundle deploys ACTIVE and the action never appears.
+        new CopyWebpackPlugin({ patterns: [{ from: './package.json', to: '' }] }),
     ],
+    mode: argv.mode === 'production' ? 'production' : 'development',
+    devtool: argv.mode === 'production' ? 'source-map' : 'eval-source-map',
 });
 ```
 
-`@jahia/webpack-config/getModuleFederationConfig` reads the `jahia.remotes` field from `package.json` and configures shared dependencies (React, MUI, Apollo) as singletons — this is what prevents version conflicts with jcontent's own React 18 instance.
+`getModuleFederationConfig(packageJson, overrides)` marks every dependency listed in `package.json` that
+is also in its shared list as `{import: false}` — the host supplies it. This is what prevents version
+conflicts with jcontent's own React 18 instance. It only looks at `dependencies`, so a host package you
+import but did not declare must be added to `shared` explicitly (the `react-redux` case above).
+
+**Verify the jar before deploying.** `unzip -l target/*.jar | grep apps/` must list `remoteEntry.js`,
+`<name>.bundle.js` and `package.json`. A jar of ~20 kB with only `.class` files means webpack never ran.
 
 ### Maven — frontend-maven-plugin
+
+The plugin must be declared in the module pom. Setting `<yarn.arguments>` in `<properties>` alone
+runs nothing: the `jahia-modules` parent does not bind the plugin for you.
 
 ```xml
 <plugin>
     <groupId>com.github.eirslett</groupId>
     <artifactId>frontend-maven-plugin</artifactId>
+    <version>2.0.1</version>
     <executions>
         <execution>
             <id>install-node-and-yarn</id>
+            <phase>generate-resources</phase>
             <goals><goal>install-node-and-yarn</goal></goals>
             <configuration>
-                <nodeVersion>v20.x.x</nodeVersion>
-                <yarnVersion>v1.22.x</yarnVersion>
+                <!-- 22, not 18/20: an unpinned resolution pulls graphql@17, which refuses older Node -->
+                <nodeVersion>v22.21.0</nodeVersion>
+                <yarnVersion>v1.22.22</yarnVersion>
             </configuration>
         </execution>
         <execution>
@@ -181,6 +223,9 @@ module.exports = (env, argv) => ({
     </executions>
 </plugin>
 ```
+
+Commit `yarn.lock` and add `node/` (the plugin's Node install dir) to `.gitignore`. Without the
+lockfile every fresh clone re-resolves the tree and the build breaks on the next incompatible transitive.
 
 Build scripts in `package.json`:
 - `build`: `yarn lint && webpack` (dev — fast, no minification)
@@ -660,6 +705,100 @@ whitelist = *.myActionName.do
 
 ---
 
+## Share election traps (white jcontent after a restart or on a new origin)
+
+Every remote registers its shared packages into one webpack share scope. Among **equal versions** webpack keeps
+the entry with the higher `uniqueName` (the `from:` string in remoteEntry), unless one is already loaded. Two
+consequences, both proven on 8.2.3.2:
+
+- **`@apollo/client`**: never register a version above the host's (jahia-ui-root and jcontent 3.7 provide
+  3.14.0). A bundle at 3.14.1 gets elected while the shell's cache stays on the host copy: white page,
+  `Invariant Violation: 2` from jcontent code. Pin the host's exact version in `package.json`.
+- **`@apollo/react-hooks` / `react-apollo` (legacy 3.1.x)**: `@apollo/react-common` 3.1.4 keeps its React context in a
+  module-local variable. A module that shares `react-hooks` but not `react-common` (robots 3.0.0, llms 1.0.0,
+  jahia-page-composer 2.1.0) carries a private context; when its copy wins the election, every legacy `useQuery`
+  or `useApolloClient` at boot throws `Invariant Violation: 1` or `2` (see `invariant-packages`) and the shell is
+  white. It surfaces on a cold origin (restart, or switching from `localhost` to a site host), because only then
+  do all remotes register before first use. If you share `@apollo/react-hooks` or `react-apollo`, share
+  `@apollo/react-common` too. Do not share them at all in new code: use `@apollo/client` hooks.
+
+Diagnose without logging in: fetch `/jahia/jcontent` as root, collect the `javascript/apps/` script URLs, and in
+each file read provides `("pkg","x.y.z"`, consumes `"pkg"(,!1)?,[`, and the `uniqueName`. The stack trace's chunk
+URL (`/modules/<culprit>/javascript/apps/...`) names the elected provider directly. Fix by stopping that bundle
+(`POST /modules/api/bundles/<group>/<id>/<version>/_stop`, form encoding) and reloading.
+
+---
+
+## Page Builder frame tokens: `--moon-*` only since jcontent 3.7.0
+
+Anything you hand to jcontent for rendering **inside the Page Builder iframe** (`pageBuilderBoxConfig`
+`borderColor` / `backgroundColors`, custom `Bar` components, injected CSS) must reference Moonstone tokens by
+their `--moon-*` names. Proven on jcontent 3.7.1 / 3.8.0-SNAPSHOT with jExperience 3.9.0:
+
+- Moonstone 2.19+ renamed every token to `--moon-*`. The un-prefixed `--color-*` names survive only as aliases in
+  `dist/legacy-global-bundle.css`, which the package entry imports, so the jcontent **shell** still resolves both.
+- jcontent 3.6.x cloned every `style[styleloader]` from the shell into the iframe, so the frame inherited the
+  aliases. jcontent 3.7.0 (`30e59e00`, css modules for the editframe) injects only `editframe-styles/scoped.css`:
+  94 `--moon-color-*`, zero `--color-*`. `Box.jsx` copies your `backgroundColors.*` strings verbatim into
+  `--jcontent-backgroundColorBase|Hovered|Selected`, so `var(--color-purple_plain20)` resolves to nothing and the
+  box loses its colour. Downgrading jcontent to 3.7.1 does not help; 3.6.2 is the last release with the aliases.
+- jExperience 3.9.0 (Moonstone 2.13) still registers `var(--color-purple)` / `var(--color-purple_plain20)` for
+  `personalizedContent`, `ABTest` and `personalizedList`: purple borders vanish in the Page Builder.
+
+- The same commit removed the cloning of shell `style[styleloader]` tags into the frame. A custom `Bar` component
+  styled with CSS modules (jExperience `Perso-experience-variants-bar`) renders in the iframe with none of its rules:
+  flex row gone, chip and arrows misaligned. In 3.7+ a Bar can only rely on inline styles, Moonstone components
+  whose CSS `editframe-styles` already ships, or CSS it injects into `ownerDocument` itself.
+
+Rules: register `borderColor: 'var(--moon-color-purple)'`, `backgroundColors: {base: 'var(--moon-color-purple_plain20)', ...}`.
+Verify in the iframe document, not the shell: `getComputedStyle(document.documentElement).getPropertyValue('--moon-color-purple_plain20')`.
+Until third-party modules catch up, the shim `0.Modules/moonstone-legacy-tokens` (system Java bundle, one edit-mode
+`RenderFilter` appending the 126 aliases as `--x: var(--moon-x, <literal>)` plus a frame script that clones the shell's style-loader tags scoped under `#jahia-portal-root`, before `</head>`) restores both; the
+real fix belongs to the extension or to jcontent's `editframe-styles`.
+
+---
+
+## Whiteboard servlet alternative (drawer → server round-trip without a node context)
+
+When the back-office feature is not tied to one node render (page-audit's AI review, geo-readiness'
+crawler check), register a plain servlet instead of an `Action`:
+
+```java
+@Component(service = {HttpServlet.class, Servlet.class},
+        property = {"alias=/my-module/my-endpoint", "allow-api-token=true"}, immediate = true)
+public class MyServlet extends HttpServlet { ... }
+// reachable at /modules/my-module/my-endpoint ; client: fetch(ENDPOINT, {credentials:'same-origin', headers:{'Content-Type':'application/json'}})
+```
+
+Hardening that every such servlet keeps: reject guests, require `application/json` (a cross-site form
+post cannot set it), per-user sliding-window rate limit, generic error bodies.
+
+- The guest constant is `JahiaUserManagerService.GUEST_USERNAME`. `JahiaUser.GUEST_USERNAME` does not exist
+  and fails compilation.
+
+### Public URL of a node from Java — never guess the shape
+
+`/<lang><site-relative-path>.html` is a 404 on every non-default site. Ask Jahia:
+
+```java
+JCRSessionWrapper live = JCRSessionFactory.getInstance().getCurrentUserSession("live", Locale.forLanguageTag(lang));
+JCRNodeWrapper node = live.getNode(path);                 // PathNotFoundException = never published
+String url = node.getUrl();                               // /cms/render/live/<lang>/sites/<key>/...html
+UrlRewriteService rw = (UrlRewriteService) SpringContextSingleton.getBean("UrlRewriteService");
+url = rw.rewriteOutbound(url, request, response);         // what the rendered page prints: vanity URL,
+                                                          // cms prefix and site key dropped per server-name rules
+```
+
+> ⚠️ **OSGi servlet requests report `/modules` as `getContextPath()`**, and the rewriter prepends it
+> faithfully: `/modules/sites/x/home.html`. Swap that prefix for `Jahia.getContextPath()` before use.
+> Verified on 8.2.3.2 (geo-readiness, 2026-09-09): digitall home → `/sites/digitall/home.html`, 200.
+
+Vanity URLs are host-dependent by design: the rewriter emits one only when the request's server name
+resolves to the page's site. On a local box where many sites share `localhost` you get the
+`/sites/<key>/...` form, which is the one that actually works there. Not a bug.
+
+---
+
 ## RenderContext setup (rendering page HTML from Java)
 
 When an Action needs to render a page to HTML, the `RenderContext` fields must be set in this exact order:
@@ -820,13 +959,19 @@ The Apollo client must be configured with a `createUploadLink` (or multipart lin
 - [ ] `<Dialog disableEnforceFocus>` on all MUI dialogs in portals
 - [ ] `window.jahia.*` APIs guarded with optional chaining (`?.`)
 - [ ] Webpack output goes to `src/main/resources/javascript/apps/`
+- [ ] Jar contains `javascript/apps/remoteEntry.js` **and** `javascript/apps/package.json` (CopyWebpackPlugin)
+- [ ] `react-redux` / `redux` / `@apollo/client` in the MF `shared` block as `{singleton, import:false}`
+- [ ] `frontend-maven-plugin` declared in the pom, Node 22, `yarn.lock` committed, `node/` ignored
 - [ ] `yarn dev` / `webpack --watch` never started from an agent
+- [ ] `pageBuilderBoxConfig` colours and any CSS meant for the Page Builder iframe use `--moon-*` token names (jcontent >= 3.7.0 injects no `--color-*` aliases into the frame)
 
 ### Java side
 - [ ] Action class: `@Component(service = Action.class)`, `getName()` matches CSRF whitelist key
 - [ ] CSRF Guard config file present and correctly named
 - [ ] RenderContext set in order: site → workspace → servletPath → mainResource
 - [ ] All JCR access runs as the calling user (no system session escalation)
+- [ ] Public URLs come from `node.getUrl()` + `UrlRewriteService.rewriteOutbound()`, with the `/modules` context path swapped out
+- [ ] Guest check uses `JahiaUserManagerService.GUEST_USERNAME`
 - [ ] Embedded libraries use per-call classloader, not global SPI registries
 - [ ] TCCL switched for libraries that use `Thread.currentThread().getContextClassLoader()`
 - [ ] OSGi config `.cfg` file present for every `ManagedService`

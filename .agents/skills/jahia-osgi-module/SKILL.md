@@ -383,6 +383,10 @@ Keep the typed `List<AnswerInput> answers` parameter in the signature — it is 
 - ❌ Forgetting to export public packages → consumers won't see the service.
 - ❌ Using `jmix:studioOnly` in CND definitions → it can silently break area rendering. Use `jmix:hiddenType`.
 - ❌ Declaring `j:linknode` or `j:url` in a CND alongside `choicelist[linkTypeInitializer]` → they are injected automatically by Jahia's mixins at runtime.
+- ❌ `JahiaUser.GUEST_USERNAME` → does not exist. Use `JahiaUserManagerService.GUEST_USERNAME`.
+- ❌ A servlet answering per-user data with no `Cache-Control` → on Jahia Cloud the front cache applies `public, s-maxage=600` to it (URL-keyed, ten minutes). Set `no-store, private, max-age=0` + `Vary: Cookie` on every response yourself.
+- ❌ `restrict_to`-style field lists that name one field the upstream does not declare → some APIs (Efficy `advanced`) answer "Internal error" for the WHOLE read rather than an empty field. Retry with a known-good field set; never let one optional field empty a composite.
+- ❌ Building a page's public URL by hand (`/<lang><site-relative-path>.html`) → 404 on every non-default site. Use `node.getUrl()` + `UrlRewriteService.rewriteOutbound(url, req, resp)`; in an OSGi servlet swap the `/modules` request context path for `Jahia.getContextPath()` afterwards.
 
 ---
 
@@ -393,6 +397,8 @@ JCRTemplate.getInstance().doExecuteWithUserSession(...)   // primary JCR access 
 JahiaSitesService.getInstance().getSiteByKey(siteKey)     // resolve a site
 JCRSessionFactory.getInstance().getCurrentUser()          // current Jahia user
 NodeTypeRegistry.getInstance().getNodeType(name)          // node type metadata
+JahiaUserManagerService.GUEST_USERNAME                    // "guest" — the only place this constant lives
+(UrlRewriteService) SpringContextSingleton.getBean("UrlRewriteService")  // .rewriteOutbound(node.getUrl(), req, resp) = public URL
 ```
 
 ---

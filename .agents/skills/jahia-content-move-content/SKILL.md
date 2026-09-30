@@ -99,6 +99,8 @@ curl -s -u root:root1234 \
 
 > ⚠️ `move` does **not** support a `name` argument — use `rename` separately if needed.
 
+> ⚠️ A move happens in the `default` workspace only. Publish the moved node afterwards (`publish(languages: [...], publishSubNodes: true, includeSubTree: true)`) and expect the live tree to follow **asynchronously** — on Jahia Cloud it took ~40 s after `publish` returned `true`. Poll the new live path before concluding the move failed; the old live path disappears at the same moment.
+
 ### Rename a node in place
 
 ```bash

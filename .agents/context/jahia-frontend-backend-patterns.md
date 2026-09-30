@@ -542,6 +542,20 @@ if (!isAllowedHost(url)) {
 }
 ```
 
+### Cache headers on per-user proxy answers
+
+A proxy that answers for the signed-in user must forbid caching on **every** response. Jahia Cloud's front cache applies page defaults (`public, s-maxage=600`) to any response that sets nothing — measured on a per-tenant `/me/...` endpoint. Set `Cache-Control: no-store, private, max-age=0`, `Pragma: no-cache`, `Expires: 0`, `Vary: Cookie` in the one place all responses are written, and send `cache: "no-store"` from the browser.
+
+### When the upstream cannot order — fetch, sort, then cut
+
+Some upstreams return rows in their own order and ignore every ordering parameter (Efficy returns a tenant's requests oldest first). Asking for a *page* then sorting client-side silently drops the newest rows: a sort cannot surface a row that was never fetched. Read up to a ceiling (the gateway's max page size), sort, then slice for display — and build any filter (statuses present, categories) from the **whole** set, not from the rows on screen, or the filter disappears the moment the visible rows happen to share a value.
+
+### Rendering HTML that comes from an external system
+
+Article bodies, mail bodies and knowledge-base answers authored in another system's editor are **data, never markup we trust**. Real CRM articles arrived as whole HTML documents whose `<style>` opened with `:root{--bg;--primary;--ink;--soft}` — injected as-is, they redefine the host's CSS variables and repaint the portal; others carried `<title>` in the body, dozens of inline styles and raw `h1`/`h2` inside an accordion.
+
+Sanitise in the client island with `DOMParser` (the browser's parser, not a regex): keep an allowlist of tags (`p, br, h1-h6, ul/ol/li, strong/em, a, img, table…`) and attributes (`href` on `http(s)`/`mailto`/`tel` only, `src` on `https`/`data:image`, `alt`, `colspan`); drop `style`, `script`, `link`, `meta`, `title`, `head`, iframes and forms with their content; unwrap everything else to its text; shift headings below the block's own heading; force `alt=""` on undescribed images; add `rel="noopener noreferrer"` to external links. Search over the *visible* text (`textContent` after the drops), never the raw markup. Style the result with zero-specificity `:where()` rules, since every class arrives stripped. Reference: tenant-portal `src/lib/sanitizeHtml.ts`. Verify by measuring the rendered page: 0 `<style>` in `<main>`, 0 `style=`/`class=` inside the article, host tokens unchanged.
+
 ### Stateful session proxy (CRM / legacy APIs)
 
 Some external services are session-based: the first request authenticates and returns a session cookie; subsequent requests reuse it. The proxy must capture, store, and refresh that cookie server-side. The browser never sees it.

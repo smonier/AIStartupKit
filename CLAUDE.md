@@ -137,6 +137,7 @@ cd <project-name> && yarn install
 - All `types.ts` props use `?:` (optional) — Jahia does not guarantee values at render time.
 - `jmix:mainResource` only for content that needs a listing card AND a full-page URL.
 - Only singleton layout types (header, footer) use `jmix:hiddenType` — **never** on child node types. `jmix:hiddenType` blocks Page Builder from selecting and editing those nodes inline. Child types managed inside a list parent must be plain `jnt:content` with no hidden flag.
+- Shared header/footer `AbsoluteArea`s are **parented on the home page** (`site.getNode("home")`), never on the site node: the site node is not a page, Page Builder never offers it, and chrome parented there renders everywhere but can be edited nowhere.
 - **Never declare `j:linknode` or `j:url` in a CND** — injected by Jahia's mixins at runtime.
 
 ### Critical view rules
@@ -147,6 +148,8 @@ cd <project-name> && yarn install
 - **Never hardcode links or URLs.** All navigable links come from contributed content (`j:linkType`, `buildNodeUrl`, weakreference).
 - Interactive components (carousels, tabs) render flat in edit mode via `renderContext.isEditMode()`.
 - Client islands: component in `.client.tsx`, wrapped with `<Island>` in the server view. Props must be serializable — no JCR objects.
+- HTML that comes from another system (a CRM knowledge base, mail bodies) is **data, never markup we trust**: sanitise it in the island with an allowlist (DOMParser), drop `style`/`script`/`title`/frames outright, shift headings under the block's own. Real CRM articles carried `:root{--primary…}` blocks that repaint the host.
+- Any servlet/Action answering **per-user data** sets `Cache-Control: no-store, private` itself — on Jahia Cloud a response with no cache header gets the page defaults (`public, s-maxage=600`) from the front cache.
 
 ### Scale of thumbs
 
@@ -213,6 +216,8 @@ whitelist = *.myActionName.do
 - RenderContext ordering when rendering page HTML from Java: `setSite()` → `setWorkspace()` → `setServletPath()` → `setMainResource()`.
 - Embedded libraries that use `ServiceLoader` / `IIORegistry` (e.g. TwelveMonkeys ImageIO): instantiate SPI classes directly via the bundle's own classloader — never via global registries that go stale on bundle refresh.
 - Switch TCCL (`Thread.currentThread().setContextClassLoader(getClass().getClassLoader())`) for any embedded library that reads it internally. Always restore in `finally`.
+- Public URL of a node from Java: `node.getUrl()` then `UrlRewriteService.rewriteOutbound()`, never a hand-built `/<lang>/<path>.html`. In an OSGi servlet the request context path is `/modules`; swap it for `Jahia.getContextPath()` after rewriting.
+- Fresh UI-extension builds: declare `frontend-maven-plugin` (Node 22), require `@jahia/webpack-config/getModuleFederationConfig` directly, share `react-redux`/`redux` as `import:false`, copy `package.json` into `javascript/apps/`, commit `yarn.lock`. Check the jar has `remoteEntry.js` before deploying.
 
 > Full detail: [`.agents/skills/jahia-osgi-ui-extension/SKILL.md`](.agents/skills/jahia-osgi-ui-extension/SKILL.md)
 
@@ -333,7 +338,7 @@ All new code — regardless of module type — is held to these standards at mer
 6. **Never use `yarn dev` from an agent.** Always use `yarn build && yarn jahia-deploy`.
 7. **Never hardcode UI strings in views** — use `t("key")` from `useTranslation()`. Front-end labels go in `settings/locales/en.json` + `fr.json`. CND labels go in `settings/resources/<module>_en.properties` + `_fr.properties`.
 8. **Never hardcode links or URLs** in views or templates. All navigable links come from contributed content.
-9. **Never use `jmix:hiddenType` on child node types.** It blocks Page Builder from selecting and editing those nodes inline. Only use it on singleton layout types (header, footer) placed in absolute areas. Child types inside orderable lists must extend plain `jnt:content` with no hidden flag so editors can click on them in Page Builder.
+9. **Never use `jmix:hiddenType` on child node types.** It blocks Page Builder from selecting and editing those nodes inline. Only use it on singleton layout types (header, footer) placed in absolute areas. Child types inside orderable lists must extend plain `jnt:content` with no hidden flag so editors can click on them in Page Builder. **Those absolute areas are parented on the home page, never on the site node** — the site node is not a page and Page Builder never offers it, so header and footer parented there cannot be edited from the UI. Seed them under `<home>` in `import.xml`.
 10. **Never declare `j:linknode` or `j:url` in a CND** — they are injected by Jahia's mixins.
 17. **Any mixin that stores hidden child nodes must declare `+ childName (Type) = Type version` in the mixin body.** Without this, `session.addNode()` throws `ConstraintViolationException: No child node definition found` at runtime. The child node definition in the mixin is what grants Jackrabbit permission to add that child to any node of a type that extends the mixin.
 18. **Keep all locale JSON files in sync (`fr.json`, `en.json`, `es.json`).** A key present in one file but missing in another renders as the raw key for visitors using that language.

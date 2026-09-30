@@ -51,7 +51,7 @@ If you are an AI agent, this is the second file you read after [`../CLAUDE.md`](
 
 | Skill | When to use |
 |---|---|
-| [`/jahia-osgi-ui-extension`](skills/jahia-osgi-ui-extension/SKILL.md) | Webpack/MF build, registry API, actions, dialogs, CSRF, TCCL, embedded libs |
+| [`/jahia-osgi-ui-extension`](skills/jahia-osgi-ui-extension/SKILL.md) | Webpack/MF build, registry API, actions, dialogs, whiteboard servlets, public URL of a node from Java, CSRF, TCCL, embedded libs |
 
 ### Java actions and backend extension (JS module + Java)
 

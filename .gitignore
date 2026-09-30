@@ -1,3 +1,6 @@
 
 # Local MCP server config — holds a live API token, never commit
 .mcp.json
+
+# Stray local copies of Jahia core source - reference only, never commit
+/org/

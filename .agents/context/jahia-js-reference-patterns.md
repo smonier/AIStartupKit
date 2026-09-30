@@ -195,7 +195,25 @@ All page templates share a **single `Layout.tsx`** that handles the HTML shell, 
 ```tsx
 // src/commons/Layout.tsx
 import { Area, AbsoluteArea, AddResources, buildModuleFileUrl, useServerContext } from "@jahia/javascript-modules-library";
+import type { RenderContext } from "org.jahia.services.render";
 import classes from "./layout.module.css";
+
+/**
+ * The node that owns the shared header and footer: the HOME PAGE.
+ *
+ * Not the site node. The site node renders on every page but is not a page, so Page Builder
+ * never offers it - chrome parented there cannot be edited from the UI at all. Owned by the home
+ * page it still renders everywhere; editors change it by opening the home page. The site is the
+ * fallback only while the home page does not exist yet (site creation).
+ */
+const chromeOwner = (renderContext: RenderContext) => {
+  const site = renderContext.getSite();
+  try {
+    return site.getNode("home");
+  } catch {
+    return site;
+  }
+};
 
 interface LayoutProps {
   head?: ReactNode;
@@ -216,11 +234,13 @@ export function Layout({ head, className, children }: LayoutProps) {
       </head>
       <body>
         <a href="#main-content" className={classes.skipLink}>Skip to content</a>
-        <AbsoluteArea name="header" parent={renderContext.getSite()} readOnly="children" />
+        {/* Owned by the home page, not the site node: the site node is never offered by Page
+            Builder, so chrome parented there could not be edited from the UI. */}
+        <AbsoluteArea name="header" parent={chromeOwner(renderContext)} readOnly="children" />
         <main id="main-content" className={className}>
           {children}
         </main>
-        <AbsoluteArea name="footer" parent={renderContext.getSite()} readOnly="children" />
+        <AbsoluteArea name="footer" parent={chromeOwner(renderContext)} readOnly="children" />
       </body>
     </html>
   );

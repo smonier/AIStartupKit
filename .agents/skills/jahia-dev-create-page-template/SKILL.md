@@ -27,19 +27,22 @@ jahiaComponent(
     displayName: "Single Column",
     name: "singleColumn",        // used in Jahia UI when selecting a template
   },
-  ({ "jcr:title": title }, { renderContext }) => (
-    <Layout title={title}>
-      <Area name="header" nodeType="namespace:header" />
-      <main style={{ maxWidth: "40rem", margin: "0 auto" }}>
-        <Area name="main" />
-      </main>
-      <AbsoluteArea
-        name="footer"
-        parent={renderContext.getSite()}
-        nodeType="namespace:footer"
-      />
-    </Layout>
-  ),
+  ({ "jcr:title": title }, { renderContext }) => {
+    // Shared chrome is OWNED BY THE HOME PAGE, never by the site node - see Step 2.
+    const site = renderContext.getSite();
+    let owner = site;
+    try { owner = site.getNode("home"); } catch { /* site being created: no home yet */ }
+
+    return (
+      <Layout title={title}>
+        <AbsoluteArea name="siteHeader" parent={owner} nodeType="namespace:pageArea" readOnly="children" />
+        <main style={{ maxWidth: "40rem", margin: "0 auto" }}>
+          <Area name="main" />
+        </main>
+        <AbsoluteArea name="siteFooter" parent={owner} nodeType="namespace:pageArea" readOnly="children" />
+      </Layout>
+    );
+  },
 );
 ```
 
@@ -51,7 +54,9 @@ jahiaComponent(
 |---|---|---|
 | Content | Per-page (each page has its own) | Shared across all pages |
 | Use for | Page body, hero, sections | Footer, navbar, sidebar |
-| `parent` prop | Not needed | Set to `renderContext.getSite()` for site-wide |
+| `parent` prop | Not needed | **The home page node** (`site.getNode("home")`), never the site node - see below |
+
+> 🚨 **Parent shared areas on the HOME PAGE, not on `renderContext.getSite()`.** The site node renders on every page, but it is not a page, so Page Builder never offers it: a header or footer parented there **cannot be edited from the UI at all** - every change goes through a script (found on tenant-portal, 2026-09-22). Owned by the home page, the area still renders on every page, an editor changes it by opening the home page, and `readOnly="children"` makes it read-only everywhere else. Fall back to the site node only while the home page does not exist yet.
 
 ---
 
@@ -175,6 +180,15 @@ jahiaComponent(
         <!-- Pre-create area nodes so editors can start dropping content immediately -->
         <hero jcr:primaryType="namespace:pageArea"/>
         <main jcr:primaryType="namespace:pageArea"/>
+
+        <!-- Shared chrome lives UNDER HOME (the AbsoluteArea parent), so it is editable in
+             Page Builder. Seed the singleton components so the regions are not blank in edit. -->
+        <siteHeader jcr:primaryType="namespace:pageArea">
+          <mainNav jcr:primaryType="namespace:mainNavigation"/>
+        </siteHeader>
+        <siteFooter jcr:primaryType="namespace:pageArea">
+          <footer jcr:primaryType="namespace:siteFooter"/>
+        </siteFooter>
       </home>
 
       <!-- Add sub-pages for each template you created -->
@@ -207,6 +221,7 @@ jahiaComponent(
 **Rules:**
 - `j:templateName` must match the `name:` in your `jahiaComponent` call — if it's wrong, editors get a blank page
 - Pre-create area nodes (`jcr:primaryType="namespace:pageArea"`) so editors don't face empty containers on first open
+- Shared chrome (`siteHeader`/`siteFooter`) goes **inside `<home>`**, matching the AbsoluteArea `parent` - at the module root it renders but can never be edited from Page Builder
 - Add a starter component in the hero area so the page isn't visually blank (optional but strongly recommended)
 - Content folders with `jmix:contributeMode` + `j:contributeTypes` restrict what editors can create in them
 - `jmix:systemNameReadonly` prevents editors from renaming or moving management pages; `jmix:nolive` prevents accidental publishing
@@ -230,9 +245,10 @@ After deploying, the new template will appear in the **template selection** step
 ### Single column with shared footer
 
 ```tsx
+const home = renderContext.getSite().getNode("home"); // the owner of shared chrome
 <Layout title={title}>
   <Area name="main" />
-  <AbsoluteArea name="footer" parent={renderContext.getSite()} nodeType="namespace:footer" />
+  <AbsoluteArea name="siteFooter" parent={home} nodeType="namespace:pageArea" readOnly="children" />
 </Layout>
 ```
 
@@ -277,6 +293,25 @@ After deploying, the new template will appear in the **template selection** step
 - [ ] `yarn build && yarn jahia-deploy` run and template appears in Jahia UI
 
 ## Troubleshooting
+
+### 🚨 Header / footer render everywhere but cannot be edited in Page Builder
+
+**Symptom:** the shared regions show on every page, in live and in edit, but no page offers them for editing; the only way to change the navigation or footer is a script.
+
+**Root cause:** the `AbsoluteArea` is parented on `renderContext.getSite()`. The site node is not a page, so Page Builder never opens it.
+
+**Fix (code):** parent on the home page - `site.getNode("home")`, falling back to the site only while home does not exist - and keep `readOnly="children"`.
+
+**Fix (existing content):** move the two area nodes under home and publish them:
+
+```graphql
+mutation { jcr { mutateNode(pathOrId: "/sites/SITE/siteHeader") { move(parentPathOrId: "/sites/SITE/home") } } }
+mutation { jcr { mutateNode(pathOrId: "/sites/SITE/home/siteHeader") { publish(languages: ["fr","en"], publishSubNodes: true, includeSubTree: true) } } }
+```
+
+On Jahia Cloud the live tree followed the publish about **40 seconds** later - a check made too early reads as a failed move. Poll the live path. Also update `import.xml` (Step 6) and any script that hardcodes the old path.
+
+**Verify:** `/cms/edit/...` answers 302 to the Page Builder shell even with a session; the raw edit render is `/cms/editframe/default/{lang}/sites/SITE/home.html` fetched with a session cookie (`POST /cms/login` with `username`, `password`, `restMode=true`). Header and footer must render there and on a sub-page.
 
 ### 🚨 Area renders blank — content invisible
 

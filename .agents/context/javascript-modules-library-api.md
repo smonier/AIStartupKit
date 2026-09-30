@@ -197,20 +197,26 @@ Editorial drop zone — scoped to the current page. Default `nodeType` is `"jnt:
 
 ### `<AbsoluteArea name parent nodeType? readOnly?>`
 
-Like Area but shared across pages. The `readOnly` prop has three modes:
+Like Area but shared across pages. `parent` is the node that OWNS the area node.
+
+> 🚨 **Parent shared header/footer on the home page, never on `renderContext.getSite()`.** The site node is not a page: Page Builder never offers it, so an area parented there renders everywhere and is editable nowhere. Use `site.getNode("home")` (fall back to the site only while home does not exist). Proven on tenant-portal, 2026-09-22; existing content is fixed with `mutateNode.move` + publish.
+
+The `readOnly` prop has three modes:
 
 ```tsx
-// Fully read-only everywhere (no editing at all)
-<AbsoluteArea name="footer" parent={renderContext.getSite()} readOnly={true} />
+const home = renderContext.getSite().getNode("home");
 
-// Read-only everywhere EXCEPT the page that owns the area node
-<AbsoluteArea name="footer" parent={renderContext.getSite()} readOnly="children" />
+// Fully read-only everywhere (no editing at all)
+<AbsoluteArea name="siteFooter" parent={home} readOnly={true} />
+
+// Read-only everywhere EXCEPT the page that owns the area node (here: the home page)
+<AbsoluteArea name="siteFooter" parent={home} readOnly="children" />
 
 // Fully editable (default)
-<AbsoluteArea name="footer" parent={renderContext.getSite()} />
+<AbsoluteArea name="siteFooter" parent={home} />
 ```
 
-`readOnly="children"` is the recommended pattern for footers and headers — editors can only modify them from one designated page, preventing accidental edits elsewhere.
+`readOnly="children"` is the recommended pattern for footers and headers — editors modify them from the home page only, preventing accidental edits elsewhere.
 
 ---
 
