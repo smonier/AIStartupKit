@@ -285,6 +285,12 @@ Expected response: `{"data": {"jcr": {"mutateNode": {"publish": true}}}}`
 
 ---
 
+> **Adding to a site editors already use: publish only what you created.** `publish` with
+> `includeSubTree: true` on a page or an area also publishes every unpublished edit an editor has
+> in progress there. Publish each new node with its subtree, and the list it was added to without
+> its subtree (`publishSubNodes: false, includeSubTree: false`), which is enough for the new order
+> to reach live. Reference: classic-templates `scripts/seed-demo.py --sections-only`.
+
 ## Step 5 — Batch creation
 
 To create multiple nodes efficiently, use `addNodesBatch`:

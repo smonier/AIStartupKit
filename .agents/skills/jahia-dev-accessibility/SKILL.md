@@ -210,6 +210,12 @@ Iterate until only `minor` violations remain (or none).
 
 ## Step 6 — Proactive checks beyond axe-core
 
+> For French sites, and for any template set held to RGAA 4.1.2, read
+> [`../../context/jahia-rgaa.md`](../../context/jahia-rgaa.md). An audit found 11 template defects
+> after a clean axe + Lighthouse run in six themes. It lists them with their fixes, the criteria to
+> design for (two navigation systems, reflow at 320 px, text spacing), the accessibility statement,
+> and how to measure.
+
 axe-core catches ~30–40% of WCAG issues automatically. Also check manually:
 
 - **Keyboard navigation**: can every interactive element (link, button, form field) be reached with Tab?

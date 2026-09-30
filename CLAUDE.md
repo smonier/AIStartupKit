@@ -149,6 +149,7 @@ cd <project-name> && yarn install
 - **Never hardcode links or URLs.** All navigable links come from contributed content (`j:linkType`, `buildNodeUrl`, weakreference).
 - Interactive components (carousels, tabs) render flat in edit mode via `renderContext.isEditMode()`.
 - Client islands: component in `.client.tsx`, wrapped with `<Island>` in the server view. Props must be serializable — no JCR objects.
+- **JSON-LD needs no `dangerouslySetInnerHTML`:** render `<script type="application/ld+json">{json}</script>` with every `<` written `\u003c` (React 19 leaves script text unescaped). One `@graph` per page from the page shell, so main resources get it too.
 - **Rich text from the repository is sanitised at render time** in one shared component (server: `js-xss` allow-list): Jahia's HTML filtering is not active on every instance, and a body saved over GraphQL can carry `<script>`, handlers and `javascript:` links that render as is.
 - HTML that comes from another system (a CRM knowledge base, mail bodies) is **data, never markup we trust**: sanitise it in the island with an allowlist (DOMParser), drop `style`/`script`/`title`/frames outright, shift headings under the block's own. Real CRM articles carried `:root{--primary…}` blocks that repaint the host.
 - Any servlet/Action answering **per-user data** sets `Cache-Control: no-store, private` itself — on Jahia Cloud a response with no cache header gets the page defaults (`public, s-maxage=600`) from the front cache.
@@ -390,6 +391,7 @@ All new code — regardless of module type — is held to these standards at mer
 - **GraphQL schema reference** (introspected from live instance — JCRQuery, JCRMutation, JCRNode, JCRProperty, all input types, enums, survey extension, common patterns, traps): [`.agents/context/jahia-graphql-schema-reference.md`](.agents/context/jahia-graphql-schema-reference.md)
 - Custom content editor widgets (SelectorType): [`.agents/context/jahia-selectortype-pattern.md`](.agents/context/jahia-selectortype-pattern.md)
 - i18n file locations, key conventions, useTranslation, loadNamespaces: [`.agents/context/jahia-i18n-patterns.md`](.agents/context/jahia-i18n-patterns.md)
-- CSS design tokens and themes (3 tiers, site-mixin theme switch, dark mode, contrast per theme): [`.agents/context/jahia-theming-tokens.md`](.agents/context/jahia-theming-tokens.md)
+- CSS design tokens and themes (3 tiers, site-mixin theme switch, dark mode, contrast per theme, theming add-ons in a free zone): [`.agents/context/jahia-theming-tokens.md`](.agents/context/jahia-theming-tokens.md)
+- RGAA 4.1.2 (French accessibility standard): what axe misses, fixes, the accessibility statement: [`.agents/context/jahia-rgaa.md`](.agents/context/jahia-rgaa.md)
 - Native node types (CND source): https://github.com/Jahia/jahia/tree/master/war/src/main/webapp/WEB-INF/etc/repository/nodetypes
 - Developer training slides: https://github.com/Jahia/developer-training/blob/main/js-training/slides.md

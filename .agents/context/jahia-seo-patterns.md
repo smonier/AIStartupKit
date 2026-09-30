@@ -332,19 +332,38 @@ Always emit one `<link rel="alternate">` per locale plus `x-default`. Omitting t
 
 ## JSON-LD Structured Data
 
-### `renderJsonLd` Helper
+### `renderJsonLd` Helper - no `dangerouslySetInnerHTML`
+
+React 19 writes the text of a `<script>` element unescaped when it renders on the server (it only
+neutralises a closing `</script>`). So JSON-LD needs no raw-HTML sink, and jahia-security-scan R10
+stays quiet. Escape `<` yourself, so no value can end the script (verified on classic-templates,
+Jahia 8.2.3.2, engine 1.2.0: valid JSON, not HTML-escaped):
 
 ```tsx
-// src/commons/renderJsonLd.tsx
-export function renderJsonLd(data: Record<string, unknown>) {
-  return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
-    />
-  );
-}
+// src/lib/schema.ts
+export const jsonForScript = (data: unknown): string =>
+  JSON.stringify(data)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+
+export const JsonLd = ({ data }: { data: unknown }) => (
+  <script type="application/ld+json">{jsonForScript(data)}</script>
+);
 ```
+
+**One `@graph` per page, rendered by the page shell** (not by each view), so every page and every
+`jmix:mainResource` gets it:
+- `Organization`: the header brand and logo; one `@id` across languages (the default-language home URL).
+- `WebSite`: named after the site title, the same name as the end of `<title>`.
+- `WebPage`: name, description, `inLanguage`.
+- `BreadcrumbList`: only when the page shows a trail, built from the same function as the visible
+  trail. Drop any breadcrumb microdata, or the list is duplicated.
+- `NewsArticle` / `Article` as the page's `mainEntity`.
+
+Use absolute URLs, built from the request's scheme, host and port. Describe only what the page
+shows. Keep the builders pure (plain values in, JSON out) so they are unit-tested outside Jahia.
+Reference: classic-templates `src/lib/schema.ts` + `src/templates/StructuredData.tsx`.
 
 ### Article Schema
 
@@ -439,7 +458,12 @@ if (mainNode.getPath() === `/sites/${siteKey}/home`) {
 
 ### Sitemap Module
 
-Jahia's `sitemap-module` auto-generates `/sitemap.xml`. Install via module provisioning:
+Jahia's `sitemap` module (5.5.0 on 8.2.3.2) generates `sitemap.xml` for search engines. Configure
+it per site (`jseomix:sitemap` on the site, host name and generation job in the site's SEO settings:
+until then `sitemap.xml` answers 404), and exclude pages with `jseomix:noIndex` / `jseomix:noFollow`.
+It has **no visitor view** (`jnt:sitemap` is a legacy hidden type), so a visitor site map page
+(RGAA 12.1, see `jahia-rgaa.md`) is a template-set component, which should leave `noIndex` pages
+out too so both maps agree. Install via module provisioning:
 
 ```xml
 <!-- provisioning/site-init.yaml or import.xml -->

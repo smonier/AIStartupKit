@@ -176,6 +176,39 @@ outside `tokens.css`. Break a token on purpose once to see each gate fail before
 
 ---
 
+## Overriding a token inside a component
+
+A token that reads another token resolves where it is **declared**. If `:root` declares
+`--ns-focus-ring: 3px solid var(--ns-color-focus)`, a component that sets only
+`--ns-color-focus` changes nothing, because the ring was already computed at `:root`. Redeclare the
+composite too:
+
+```css
+.image { /* hero over a photo */
+  --ns-color-focus: var(--ns-color-text-on-overlay);
+  --ns-focus-ring: 3px solid var(--ns-color-focus);
+}
+```
+
+## Theming components of other modules
+
+Give add-ons (FAQ, gallery, store locator, forms) one section type that accepts
+`jmix:droppableContent`, a "free zone" referencing only core types, so there is no hard
+dependency. Add a bridge stylesheet that maps their variables onto the semantic tokens:
+- Scope the mapping to the zone's class: a class beats the add-on's `:root` defaults.
+- Put a variable on `:root` only when the add-on renders outside the zone. Formidable's message
+  button is one: it sits beside the form.
+- Where an add-on paints outside its variables, **measure first**. Sweep the computed
+  `background-color`/`color` inside the zone in dark mode, then target exactly those elements.
+  CSS-module classes are hashed (`_jsfaq-item_rhlsc_285`). Match the stable local name tied to
+  the element (`article[class*="_jsfaq-item_"]`), never the hash, and never a bare `*="_item_"`
+  that also matches `_item__toggle_` children.
+- Never recolour every add-on heading. A component that keeps its own light panel (js-store-locator)
+  then shows light text on light: axe caught this in dark mode only.
+- Re-run the site review with the scheme forced dark, not just light.
+
+Reference: classic-templates `src/templates/addons.css`.
+
 ## Checklist
 
 - [ ] One `tokens.css`, imported once by `Layout.tsx`; every token prefixed with the module namespace
