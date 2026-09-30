@@ -150,7 +150,7 @@ cd <project-name> && yarn install
 - Interactive components (carousels, tabs) render flat in edit mode via `renderContext.isEditMode()`.
 - Client islands: component in `.client.tsx`, wrapped with `<Island>` in the server view. Props must be serializable — no JCR objects.
 - **JSON-LD needs no `dangerouslySetInnerHTML`:** render `<script type="application/ld+json">{json}</script>` with every `<` written `\u003c` (React 19 leaves script text unescaped). One `@graph` per page from the page shell, so main resources get it too.
-- **Rich text from the repository is sanitised at render time** in one shared component (server: `js-xss` allow-list): Jahia's HTML filtering is not active on every instance, and a body saved over GraphQL can carry `<script>`, handlers and `javascript:` links that render as is.
+- **Rich text from the repository is sanitised at render time** in one shared component (server: `js-xss` allow-list), never trusted as stored: platform-side HTML filtering is a site setting the template set cannot count on.
 - HTML that comes from another system (a CRM knowledge base, mail bodies) is **data, never markup we trust**: sanitise it in the island with an allowlist (DOMParser), drop `style`/`script`/`title`/frames outright, shift headings under the block's own. Real CRM articles carried `:root{--primary…}` blocks that repaint the host.
 - Any servlet/Action answering **per-user data** sets `Cache-Control: no-store, private` itself — on Jahia Cloud a response with no cache header gets the page defaults (`public, s-maxage=600`) from the front cache.
 

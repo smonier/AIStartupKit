@@ -95,7 +95,7 @@ Rule: **if a human visitor can read it, a contributor must be able to edit it.**
 
 **C13 — Rich text rendered without sanitising**
 Check: any `dangerouslySetInnerHTML` fed by a `richtext` property (or any stored HTML) that does not go through an allow-list sanitizer.
-Fix: sanitise at render time in one shared component (server side: `js-xss` with an allow-list; in a client island: `DOMParser`). Do not rely on Jahia's HTML filtering - it is not active on every instance (on a local 8.2.3.2, a body saved over GraphQL kept `<script>`, `onerror` and `javascript:` and rendered them). Keep formatting, lists, tables, links, images; drop scripts, styles, frames, handlers, `class`/`style`; allow href/src only for http(s), mailto, tel, relative and `##cms-context##` (not `//host`); turn `<h1>` into `<h2>`. jahia-security-scan R10 still flags the one sink: document the justification next to it.
+Fix: sanitise at render time in one shared component (server side: `js-xss` with an allow-list; in a client island: `DOMParser`). Never rely on platform-side HTML filtering: it is a site setting the template set cannot count on. Keep formatting, lists, tables, links, images; drop scripts, styles, frames, handlers, `class`/`style`; allow href/src only for http(s), mailto, tel, relative and `##cms-context##` (not `//host`); turn `<h1>` into `<h2>`. jahia-security-scan R10 still flags the one sink: document the justification next to it.
 
 **C8 — Generic area type used for every Area**
 Check: page templates where every `<Area>` uses the same generic area type (e.g. `nodeType="namespace:pageArea"` everywhere). This means editors see ALL `pageComponent` types as droppable options in every area — a hero section will appear as an option in a feature card grid.
