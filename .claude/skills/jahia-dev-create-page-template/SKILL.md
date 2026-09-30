@@ -36,7 +36,8 @@ jahiaComponent(
     return (
       <Layout title={title}>
         <AbsoluteArea name="siteHeader" parent={owner} nodeType="namespace:pageArea" readOnly="children" />
-        <main style={{ maxWidth: "40rem", margin: "0 auto" }}>
+        <main id="main-content" style={{ maxWidth: "40rem", margin: "0 auto" }}>
+          <h1>{title}</h1>{/* the ONE h1 of the page - components start at h2 */}
           <Area name="main" />
         </main>
         <AbsoluteArea name="siteFooter" parent={owner} nodeType="namespace:pageArea" readOnly="children" />
@@ -45,6 +46,42 @@ jahiaComponent(
   },
 );
 ```
+
+### The Layout shell: `<title>`, skip link, landmarks
+
+Every template renders through one `Layout` (`src/templates/Layout.tsx`) that owns the document. It is where the SEO and accessibility baseline lives, so no template can forget it:
+
+```tsx
+import type { ReactNode } from "react";
+import { useServerContext } from "@jahia/javascript-modules-library";
+import { useTranslation } from "react-i18next";
+
+export const Layout = ({ title, children }: { title?: string; children: ReactNode }) => {
+  const { renderContext } = useServerContext();
+  const { t } = useTranslation();
+  const site = renderContext.getSite();
+  const siteName = site.getPropertyAsString("j:siteTitle") ?? site.getName();
+  return (
+    <html lang={renderContext.getMainResourceLocale().getLanguage()}>
+      <head>
+        <meta charSet="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* jcr:title is the short page name - append the site name for SEO */}
+        <title>{title ? `${title} | ${siteName}` : siteName}</title>
+      </head>
+      <body>
+        <a href="#main-content" className="skip-link">{t("layout.skipToContent")}</a>
+        {children}
+      </body>
+    </html>
+  );
+};
+```
+
+- `lang` comes from the rendering locale, never a literal `"en"`.
+- The skip link text is a locale key, and the target `id="main-content"` sits on the template's `<main>`.
+- The template renders the page's `<h1>` from `jcr:title`; components never render `<h1>` (see `jahia-dev-create-view` Step 1b for the hero case).
+- Keep the navigation a **component** (a Navigation Menu type seeded in the header area, 3 levels deep), not inline template markup: inline nav cannot be edited or reused, and it breaks rule 19.
 
 ---
 
@@ -268,11 +305,12 @@ const home = renderContext.getSite().getNode("home"); // the owner of shared chr
 ```tsx
 ({ "jcr:title": title }, { renderContext }) => {
   const isEdit = renderContext.isEditMode();
+  const home = renderContext.getSite().getNode("home"); // the owner of shared chrome
   return (
     <Layout title={title}>
       <Area name="main" />
       <nav style={{ flexDirection: isEdit ? "column" : "row" }}>
-        <AbsoluteArea name="footer" parent={renderContext.getSite()} />
+        <AbsoluteArea name="siteFooter" parent={home} readOnly="children" />
       </nav>
     </Layout>
   );
@@ -287,7 +325,12 @@ const home = renderContext.getSite().getNode("home"); // the owner of shared chr
 - [ ] `name` is set (used in Jahia UI template picker)
 - [ ] Areas use a custom area node type (not bare `<Area name="..."/>`)
 - [ ] Custom area type has `jmix:list`, `jmix:hiddenType`, and `orderable`
-- [ ] `AbsoluteArea` uses `renderContext.getSite()` as parent
+- [ ] `AbsoluteArea` for shared chrome uses the **home page** as parent (`site.getNode("home")`), with `readOnly="children"`, never the site node
+- [ ] `<title>` is "page | site" (`j:siteTitle`), `<html lang>` from the rendering locale
+- [ ] Skip link present (`<a href="#main-content">`, text from a locale key) and `<main id="main-content">`
+- [ ] Exactly one `<h1>`, rendered by the template from `jcr:title` - no `<h1>` in any component
+- [ ] `<footer>` landmark always has visible content (never empty) - seed the footer node in `import.xml`
+- [ ] Navigation is a Navigation Menu component in the header area, 3 levels deep - not inline template markup
 - [ ] Structural container nodes use `jmix:hiddenType` (hidden from picker)
 - [ ] Decision made: page template vs sectioning component (see Step 4)
 - [ ] `yarn build && yarn jahia-deploy` run and template appears in Jahia UI

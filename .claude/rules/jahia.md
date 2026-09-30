@@ -30,6 +30,17 @@ You are helping develop a **Jahia JavaScript Module** — a React-based template
 - **MCP-first for all Jahia operations** — the `jahia` MCP server covers site, page, content, and publication. Never fall back to `curl` + GraphQL mutations for anything MCP can do. (GraphQL/`curl` reads stay valid where MCP has no equivalent.)
 - **Run `/jahia-review` (or at least `/jahia-review-site`) after each deploy** — the site review runs the full axe ruleset + Lighthouse SEO audits and exits non-zero on ANY violation. It reads `pages-to-review.json` and writes `pages.json` only when everything passes — so `pages.json` existing IS the green signal. Fix all violations before declaring work done.
 
+### Adopted from `@jahia/agentic` instructions (rules 7a-13, ported 2026-09-30)
+
+- **Run `yarn` and `npx` from the module root** - each module is a standalone project, not a workspace member; running from a parent directory fails on the workspace boundary.
+- **Use `grep`, not `ugrep`** - `grep -rn`, `-E` or `-P`; never `ugrep` or `(?m)` flags.
+- **Accessible HTML from the start** - semantic landmarks (`<header>`, `<nav>`, `<main>`, `<footer>`, `<section>`, `<article>`); **exactly one `<h1>` per page, rendered by the page template from `jcr:title`, never by a component** (a hero defaults to `<h2>`; when it must read as the title, the page's "hide title" option renders the template `<h1>` visually hidden); strict h1 → h2 → h3; `alt` from the image node's `jcr:title` (`alt=""` only for decorative images); a skip link at the top of the layout; never an empty `<nav>` or `<footer>`.
+- **Deploy iteratively** - `yarn build && yarn jahia-deploy` after each component, verify it renders, then move on. A broken component is easier to diagnose alone.
+- **Build the page template first** - `Layout` with `<title>{title} | {siteName}</title>` (`jcr:title` stays the short page name), `<html lang>` from the rendering locale, skip link, `<main id="main-content">` holding the `<h1>` and Areas. Where upstream builds the nav inline, we keep a Navigation Menu **component** in the home-page header area (rules 12 and 18 above).
+- **SEO baseline** - every template renders `<title>`, every `<img>` has `alt`, every link has visible text or an `aria-label`, one `<h1>` matching the page title.
+- **Colocate types with their component** (`src/components/<Category>/<Name>/definition.cnd`). `settings/definitions.cnd` holds only the namespace, the base component mixins and the **shared** mixins reused by several types (rule 16: cta, media, seo, siteTheme) - never a component's own type.
+- **Theme through tokens, never literals** - views consume semantic CSS custom properties (`var(--ns-color-text)`), never a hex colour, font stack or pixel shadow. See `.agents/context/jahia-theming-tokens.md`.
+
 > See `AGENTIC-SYNC.md` for the full diff vs upstream and what we intentionally keep different.
 
 ## Migration / Website Import Principles

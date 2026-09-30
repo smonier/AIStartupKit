@@ -350,6 +350,10 @@ All new code — regardless of module type — is held to these standards at mer
 25. **Every resource bundle field key must have a companion `ui.tooltip` key.** No field in `.properties` files is complete without its tooltip — it is the primary documentation for content editors.
 24. **Every string a visitor can read must be a contributor-editable CND field.** This applies during migration especially: event dates, location names, CTA labels, button text, community slogans, submit button labels — any visible text. Add a `(string) i18n` property to the CND, use it in the view with a null-guard (`{props.label && <span>{props.label}</span>}`), and never fall back to a hardcoded default. A hardcoded label cannot be changed without a code deploy and silently breaks every language except the one it was written in.
 
+26. **Exactly one `<h1>` per page, rendered by the page template from `jcr:title`.** Components start at `<h2>`, heroes included; a page "hide title" option renders the template `<h1>` visually hidden when the hero must read as the title. The `Layout` renders `<title>{title} | {siteName}</title>`, `<html lang>` from the rendering locale, a skip link, and `<main id="main-content">`. Footer and nav landmarks are never empty.
+27. **Deploy after each component**, verify it renders, then build the next one.
+28. **Views never hardcode colours, fonts or shadows** - they consume the module's semantic CSS tokens, and themes (light/dark and brand variants) are swapped by overriding tokens, not by editing components. See [theming tokens](.agents/context/jahia-theming-tokens.md).
+
 **OSGi UI extensions (Track 2)**
 
 11. **React 18 only.** Never import React 19 APIs in a UI extension — the host jcontent singleton is React 18.
@@ -384,5 +388,6 @@ All new code — regardless of module type — is held to these standards at mer
 - **GraphQL schema reference** (introspected from live instance — JCRQuery, JCRMutation, JCRNode, JCRProperty, all input types, enums, survey extension, common patterns, traps): [`.agents/context/jahia-graphql-schema-reference.md`](.agents/context/jahia-graphql-schema-reference.md)
 - Custom content editor widgets (SelectorType): [`.agents/context/jahia-selectortype-pattern.md`](.agents/context/jahia-selectortype-pattern.md)
 - i18n file locations, key conventions, useTranslation, loadNamespaces: [`.agents/context/jahia-i18n-patterns.md`](.agents/context/jahia-i18n-patterns.md)
+- CSS design tokens and themes (3 tiers, site-mixin theme switch, dark mode, contrast per theme): [`.agents/context/jahia-theming-tokens.md`](.agents/context/jahia-theming-tokens.md)
 - Native node types (CND source): https://github.com/Jahia/jahia/tree/master/war/src/main/webapp/WEB-INF/etc/repository/nodetypes
 - Developer training slides: https://github.com/Jahia/developer-training/blob/main/js-training/slides.md

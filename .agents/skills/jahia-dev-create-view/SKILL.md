@@ -53,7 +53,7 @@ jahiaComponent(
 // small.server.tsx — registered as a named view AND exported for direct reuse
 export const SmallHero = jahiaComponent(
   { componentType: "view", nodeType: "ns:heroSection", name: "small" },
-  ({ title, background }: Props) => <header style={{ backgroundImage: `url(${buildNodeUrl(background)})` }}><h1>{title}</h1></header>,
+  ({ title, background }: Props) => <header style={{ backgroundImage: `url(${buildNodeUrl(background)})` }}><h2>{title}</h2></header>,
 );
 
 // fullPage.server.tsx — reuse the component directly without going through Jahia rendering
@@ -74,6 +74,66 @@ When you have a source HTML fragment to translate (e.g. from `/jahia-dev-import-
 **Self-check before finishing:** Count the attributes on 2–3 key elements in the source HTML. If the source `<div>` has 6 attributes and your TSX has 4, you dropped something — go back.
 
 **CSS class names:** Rename source HTML class names to CSS Module keys (`hero__title` → `classes.heroTitle`). If the component also imports a vendor CSS file as a static asset (see `jahia-dev-import-from`), those vendor classes stay as plain strings in the JSX — they are not processed by CSS Modules.
+```
+
+---
+
+## Step 1b — Accessibility and SEO rules (apply to every view)
+
+Build these requirements in from the start; retrofitting them later is more expensive. They are what `/jahia-review-site` (full axe ruleset + Lighthouse SEO) fails on.
+
+### Semantic HTML structure
+
+| Element | Rule |
+|---|---|
+| `<section>`, `<article>` | Wrap every self-contained block of content |
+| `<header>` / `<footer>` | Use for the page header and footer in page templates |
+| `<nav>` | Wrap navigation menus; add `aria-label` when there are multiple navs (main nav, utility links, footer links) |
+| `<main>` | Exactly one per page, wrapping all page body content (already enforced by the Layout component for page templates) |
+| Headings | Each page has exactly one `<h1>`, **owned by the page template** and rendered from the page's `jcr:title` (the `fullPage` view of a main resource renders the item's title as its `<h1>`). Components start at `<h2>`; sub-sections use `<h3>`. Never skip levels. |
+
+**Hero headings.** A hero is a component, so its heading defaults to `<h2>`. When a design needs the hero heading to *be* the page title, do not give the hero its own `<h1>` (two `<h1>`s fail Lighthouse, and a hero dropped on a second page duplicates it). Give the page a "hide title" option (a page mixin boolean) that renders the template's `<h1>` visually hidden, so screen readers and crawlers still get the page title.
+
+### Images
+
+Every `<img>` must have an `alt` attribute. Decorative images use `alt=""`. Informational images use the image node's own title:
+
+```tsx
+// ❌ Missing alt
+<img src={buildNodeUrl(props.image)} />
+
+// ✅ Alt from the image node's title (no extra CND property needed)
+<img src={buildNodeUrl(props.image)} alt={props.image?.getPropertyAsString("jcr:title") ?? ""} />
+```
+
+The image node already has `jcr:title` (from `mix:title`). **Do not add `imageAlt (string) i18n`** to the CND: it forces editors to enter duplicate data.
+
+### Colour contrast
+
+Body text needs a contrast ratio of at least 4.5:1, large text (18px+, or bold 14px+) at least 3:1, against its background. Views never hardcode colours: they consume the module's semantic colour tokens (`var(--ns-color-text)`, `var(--ns-color-surface)`…), and contrast is checked once per theme in the token file, light and dark, rather than per component.
+
+### Link and button names
+
+Every `<a>` and `<button>` must have an accessible name: visible text or `aria-label`. Icon-only buttons and links need `aria-label`, and the icon itself is `aria-hidden="true"`. The label comes from `t("key")` or a contributed field, never a hardcoded string.
+
+```tsx
+// ❌ No accessible name
+<button><svg>…</svg></button>
+
+// ✅ Accessible name via aria-label
+<button aria-label={t("nav.close")}><svg aria-hidden="true">…</svg></button>
+```
+
+### Focus styles
+
+Never suppress focus indicators globally. Use `:focus-visible` with the module's focus token:
+
+```css
+/* ❌ Never do this */
+* { outline: none; }
+
+/* ✅ Style keyboard focus without affecting mouse users */
+:focus-visible { outline: var(--ns-focus-ring); outline-offset: var(--ns-focus-offset); }
 ```
 
 ---
@@ -264,7 +324,7 @@ jahiaComponent(
 );
 ```
 
-The `Props` type must be a discriminated union (see `jahia-dev-define-content-type` skill).
+The `Props` type must be a discriminated union (see `jahia-cnd-author` skill).
 
 ### Cache properties — controlling fragment caching
 

@@ -73,7 +73,7 @@ export default function HeroSection() {
 // ✅ Client component — regular CSS import only
 import "./HeroSectionClient.css";
 export default function HeroSectionClient({ title }: Props) {
-  return <section className="hero-section"><h1>{title}</h1></section>;
+  return <section className="hero-section"><h2>{title}</h2></section>;
 }
 ```
 

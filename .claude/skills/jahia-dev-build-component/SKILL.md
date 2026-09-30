@@ -1,13 +1,13 @@
 ---
 name: jahia-dev-build-component
-description: Builds a complete Jahia component (content type + view + CSS) from a description. Meta-skill that orchestrates jahia-dev-define-content-type and jahia-dev-create-view. Use when asked to build a new UI component or section.
+description: Builds a complete Jahia component (content type + view + CSS) from a description. Meta-skill that orchestrates jahia-cnd-author and jahia-dev-create-view. Use when asked to build a new UI component or section.
 ---
 
 ## Overview
 
 This meta-skill builds a complete **Single Directory Component (SDC)** — the standard Jahia component pattern — by sequencing two atomic skills:
 
-1. `jahia-dev-define-content-type` → create the CND definition and `types.ts`
+1. `jahia-cnd-author` → create the CND definition, `types.ts` and resource-bundle labels (self-validating sub-agent; `jahia-dev-define-content-type` stays available for a trivial one-field type)
 2. `jahia-dev-create-view` → implement the React view and CSS Module
 
 Run these steps in order. Do not skip to the view before the content type is defined.
@@ -20,13 +20,15 @@ Run these steps in order. Do not skip to the view before the content type is def
 
 If the user provides a reference URL (or mentions a site to model after), invoke `/jahia-dev-screenshot` **before writing any code** to capture the visual spec.
 
+> Skip this step in automated / autopilot contexts: screenshot comparison needs a human to judge it and adds significant time.
+
 The screenshot gives the view implementation visual context: layout, colors, typography, and component anatomy. Reference it throughout Steps 2–3.
 
 ---
 
 ## Step 1 — Write and confirm the content spec
 
-Before writing any code, fill out this template and confirm with the user:
+Before writing any code, fill out this template. In an interactive session, confirm it with the user; in autopilot mode, proceed with your best judgement and write down what you chose:
 
 ```
 Name: <ComponentName>
@@ -41,19 +43,33 @@ Used where: <Area on page / nested in <Parent> / listing item>
 Has children: <yes: ChildType / no>
 ```
 
-Only proceed once the spec is confirmed.
+In an interactive session, only proceed once the spec is confirmed.
 
 ---
 
-## Step 2 — Invoke `jahia-dev-define-content-type`
+## Step 2 — REQUIRED: Invoke `jahia-cnd-author`
 
-Use the instructions from the `jahia-dev-define-content-type` skill to:
+**Do not write CND manually.** Jahia-specific patterns (`choicelist[linkTypeInitializer]`, `mix:title`, child nodes for CTAs, `jmix:image` weakreferences) are not in LLM training data; writing from memory produces broken output.
 
-1. Identify the namespace (check `settings/definitions.cnd`)
-2. Create `src/components/<Category>/<Name>/definition.cnd`
-3. Create `src/components/<Category>/<Name>/types.ts`
-4. Run `yarn build && yarn jahia-deploy` to push the type to Jahia
-5. Verify the content type appears in the Jahia content editor
+Invoke `/jahia-cnd-author` (it runs as a forked sub-agent) with the complete spec:
+
+```
+Component: <PascalCase name>
+Namespace prefix: <ns>
+Module path: <absolute path to module root>
+Fields:
+  - <fieldName>: <type description> [mandatory] [i18n] [multiple]
+Children: <repeatable sub-items, e.g. "CTA buttons with label + link">
+Usage: <where this component appears, e.g. "dropped in page areas">
+Shared mixins to reuse: <from settings/definitions.cnd, e.g. nsmix:cta, nsmix:media>
+```
+
+Wait for **PASS** before continuing. If it returns **FAIL**, send the issues back to `jahia-cnd-author` to fix. Then:
+
+1. Run `/jahia-dev-review-cnd` on the new `definition.cnd` until it reports PASS
+2. Check `_en.properties` and `_fr.properties` carry a label and a `ui.tooltip` for the type and every field
+3. Run `yarn build && yarn jahia-deploy` to push the type to Jahia
+4. Verify the content type appears in the Jahia content editor
 
 ---
 
@@ -128,7 +144,9 @@ If the component has child nodes (e.g. a hero with CTA buttons), repeat Steps 2�
 ---
 
 ## Validation checklist
-- [ ] Spec confirmed before writing any code
+- [ ] Spec written (and confirmed, in an interactive session) before writing any code
+- [ ] CND produced by `jahia-cnd-author` and `/jahia-dev-review-cnd` reports PASS
+- [ ] Semantic HTML used: correct heading level, `alt` text on images, sufficient colour contrast
 - [ ] Component count within scale of thumbs (1–4 templates, 5–10 types, 2–5 mixins, 1–4 views/type)
 - [ ] `definition.cnd` created with correct namespace and mixins
 - [ ] `types.ts` reflects all CND properties

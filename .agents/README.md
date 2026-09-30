@@ -85,6 +85,7 @@ If you are an AI agent, this is the second file you read after [`../CLAUDE.md`](
 | [`context/javascript-modules-library-api.md`](context/javascript-modules-library-api.md) | Accurate API signatures and non-obvious behaviors for `@jahia/javascript-modules-library` (Island, Render, RenderChildren, useGQLQuery, getNodeProps Proxy, buildModuleFileUrl, getSiteLocales, AbsoluteArea readOnly) |
 | [`context/jahia-js-reference-patterns.md`](context/jahia-js-reference-patterns.md) | Production patterns from real modules: design-system monorepo, Layout wrapper, cache invalidation, responsive images, CTA mixin, CSS variables with fallbacks, theme scoping, gql.tada, clsx, locale formatting, content-editor-forms fieldsets, empty area workaround |
 | [`context/jahia-i18n-patterns.md`](context/jahia-i18n-patterns.md) | i18n file locations and key conventions for JS template sets (settings/resources + settings/locales) and OSGi modules (src/main/resources/resources); useTranslation, loadNamespaces, EN+FR minimum rule |
+| [`context/jahia-theming-tokens.md`](context/jahia-theming-tokens.md) | CSS design tokens for JS template sets: 3 tiers (primitives, semantic roles, component-local), namespaced tokens, site-mixin theme switch from jContent, light/dark, contrast checked per theme, no-literal grep gate |
 
 ---
 

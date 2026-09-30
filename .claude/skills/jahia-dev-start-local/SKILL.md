@@ -79,7 +79,24 @@ Follow the instructions on that page for the user's platform, then return here t
 
 ## Step 4 — Create a new site in Jahia
 
-Once the module is deployed to Jahia, create the site via the Provisioning API — **do not use the UI**.
+Once the module is deployed to Jahia, create the site via the `jahia` MCP server (MCP first) - **do not use the UI**:
+
+```
+tool: site.create
+args: {
+  "siteKey": "<module-name>",
+  "title": "My Site",
+  "templateSet": "<module-name>",
+  "defaultLanguage": "en",
+  "serverName": "localhost"
+}
+```
+
+Replace `<module-name>` with the `name` from `package.json`. `templateSet` must exactly match the deployed module name. Verify with `tool: site.list`: the site key must appear in the response. Then check the site's languages (`j:languages`) and add the second language (every module ships EN + FR): site creation has been seen to ignore the requested languages.
+
+#### Fallback: the `jahia` MCP server is not connected
+
+Use the Provisioning API instead.
 
 > ⚠️ **CRITICAL: syntax is `- createSite: ""`** — the empty string `""` after the colon is **mandatory**. Without it, Jahia returns HTTP 200 but silently creates nothing. Using `- createSite:` with nested properties is **wrong and will fail silently**.
 
@@ -119,8 +136,9 @@ Then open **Page Builder** at http://localhost:8080/jahia/page-builder to start 
 - [ ] `docker compose up --wait` completes without errors (Docker path)
 - [ ] Jahia UI is reachable at http://localhost:8080
 - [ ] Module deployed to Jahia (`yarn build && yarn jahia-deploy` run; or `yarn dev` in user terminal for interactive development)
-- [ ] Site created via Provisioning API (`createSite: ""` with correct templateSet)
-- [ ] GraphQL confirms `/sites/<site-key>` node exists
+- [ ] Site created via MCP `site.create` (fallback: Provisioning API `createSite: ""`) with correct `templateSet`
+- [ ] `site.list` (or GraphQL `nodeByPath`) confirms the site key exists
+- [ ] Site languages checked: EN and FR both active
 
 ## Troubleshooting
 

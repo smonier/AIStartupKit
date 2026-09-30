@@ -119,6 +119,13 @@ yarn build && yarn jahia-deploy
 
 Verify the module is installed:
 
+```
+tool: content.get
+args: { "path": "/modules/<module-name>" }
+```
+
+Fallback without MCP:
+
 ```bash
 curl -s -u root:root1234 -H "Origin: http://localhost:8080" \
   -X POST http://localhost:8080/modules/graphql \
@@ -132,7 +139,24 @@ Replace `<module-name>` with the `name` from `package.json`. The response should
 
 ## Step 5 — Create a new site in Jahia
 
-After the module is deployed, create the site via the Provisioning API — **do not use the UI**.
+After the module is deployed, create the site via the `jahia` MCP server (MCP first) - **do not use the UI**:
+
+```
+tool: site.create
+args: {
+  "siteKey": "<module-name>",
+  "title": "My Site",
+  "templateSet": "<module-name>",
+  "defaultLanguage": "en",
+  "serverName": "localhost"
+}
+```
+
+Replace `<module-name>` with the `name` from `package.json`. `templateSet` must exactly match the deployed module name. Verify with `tool: site.list`: the site key must appear in the response. Then check the site's languages (`j:languages`) and add the second language (every module ships EN + FR): site creation has been seen to ignore the requested languages.
+
+#### Fallback: the `jahia` MCP server is not connected
+
+Use the Provisioning API instead.
 
 > ⚠️ **CRITICAL: syntax is `- createSite: ""`** — the empty string `""` after the colon is **mandatory**. Without it, Jahia returns HTTP 200 but silently creates nothing. Using `- createSite:` with nested properties is **wrong and will fail silently**.
 
@@ -245,5 +269,6 @@ If anything goes wrong during setup or scaffolding, refer to the official Jahia 
 - [ ] Module directory created with expected structure
 - [ ] `yarn install` completes without errors
 - [ ] `yarn build && yarn jahia-deploy` succeeds — module appears at `/modules/<name>` in JCR
-- [ ] Site created with `createSite: ""` — JCR confirms `/sites/<name>` exists
+- [ ] Site created with MCP `site.create` (fallback: Provisioning API `createSite: ""`) - `site.list` confirms the site key
+- [ ] Site languages checked: EN and FR both active
 - [ ] `j:inactiveLanguages` and `j:inactiveLiveLanguages` set to `[]` on the site node

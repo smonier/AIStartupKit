@@ -4,15 +4,34 @@ This repo's Jahia JS-module skills track the official reference harness
 [`Jahia/agentic`](https://github.com/Jahia/agentic) (`@jahia/agentic` on npm).
 It is an **ongoing-improvement** repo — re-check periodically.
 
-- **Last synced:** v0.6.0 (2026-09-03)
-- **Re-sync command:** `./.agents/agentic-sync.sh` (clones upstream, prints
-  missing / changed / identical / local-only). Update this file afterward.
-  ⚠ The script only diffs `SKILL.md` — also `diff -rq` the `references/` and
-  `scripts/` dirs of shared skills before concluding "identical".
+- **Last synced:** v0.6.0 (2026-09-03; re-checked 2026-09-30, no upstream delta)
+- **Re-sync command:** `./.agents/agentic-sync.sh` (clones upstream with full
+  history, prints the upstream commits and files changed since the **Last synced**
+  tag above, then missing / changed / identical / local-only per whole skill dir
+  (SKILL.md, `references/`, `scripts/`), and checks the mirror). Update this file
+  afterward, including the **Last synced** line the script reads.
 - **Mirror invariant:** `.agents/skills/` and `.claude/skills/` must stay
   identical (`diff -rq .agents/skills .claude/skills`). Every skill edit goes
   to BOTH. The v0.5.1 pass repaired 11 drifted files where commits had patched
   only one side.
+
+## Re-check 2026-09-30: no upstream delta, 5 pending items ported
+
+Upstream is still v0.6.0 (`main` = `40fb23e`, 2026-08-21); no commits since, other branches stale.
+This pass closed the "pull improvements next pass" / "diff next pass" rows below, adapting
+where our rules lead:
+
+| Skill / file | Taken from upstream | Kept ours |
+|---|---|---|
+| `jahia-dev-build-component` | CND work goes to `jahia-cnd-author` (spec block, wait for PASS, loop on FAIL); autopilot wording (skip screenshot, proceed on best judgement) | Step 5 accessibility audit, screenshot compare, plus `/jahia-dev-review-cnd` + properties check after cnd-author |
+| `jahia-dev-create-view` | Step 1b accessibility + SEO rules (landmarks, one `<h1>`, alt from `jcr:title`, contrast, names, focus); discriminated-union pointer to `jahia-cnd-author` | `<h1>` owned by the template made explicit, hero defaults to `<h2>` + page "hide title" option; contrast via semantic tokens; `aria-label` from `t()`. Hero example `<h1>` → `<h2>` (also in `context/jahia-frontend-backend-patterns.md`) |
+| `jahia-dev-create-page-template` | Layout shell: `<title>` "page \| site", skip link, `<main id="main-content">`, template `<h1>`, never-empty footer; checklist lines | Home-page AbsoluteArea owner (upstream still parents on the site node), Navigation Menu **component** instead of inline nav. Fixed our own checklist + edit-mode example that still said "parent = site" |
+| `jahia-dev-create-template-set`, `jahia-dev-start-local` | MCP `site.create` / `site.list` / `content.get` as the primary path (our MCP-first rule) | Provisioning API curl kept as the no-MCP fallback, inactive-languages post-creation step, EN + FR language check |
+| `jahia.instructions.md` rules 7a, 7b, 8, 10, 12, 13 | → `.claude/rules/jahia.md` ("Adopted from instructions" block) + `CLAUDE.md` rules 26-27 | Rule 11 (colocate types) adopted **with a carve-out** for shared mixins in `settings/definitions.cnd` (our rule 16); rule 8's `alt="Image"` fallback not taken (`alt=""` for decorative images is correct) |
+
+Also added (local, not upstream): `.agents/context/jahia-theming-tokens.md` + `CLAUDE.md` rule 28
+(views never hardcode colours; themes swap tokens). `agentic-sync.sh` now clones with history and
+diffs whole skill dirs.
 
 ## Incorporated at v0.6.0 (2026-09-03)
 
@@ -78,13 +97,13 @@ reconcile field-by-field only if upstream grows something we lack:
 | `jahia-dev-accessibility` | 11 / 271 | **ours** (upstream is a stub) — keep |
 | `jahia-dev-query-content` | 204 / 433 | **ours** (richer) — keep |
 | `jahia-dev-import-from` | 244 / 383 | **ours** (+ migration rules section) — keep |
-| `jahia-dev-create-view` | 896 / 926 | **ours** (+ island i18n namespace trap) — keep |
+| `jahia-dev-create-view` | 896 / 986 | **ours** (+ island i18n namespace trap; upstream Step 1b ported 2026-09-30) - keep |
 | `jahia-review-code` | 228 / 272 | **ours** (C9–C12 + W10) — keep |
 | `jahia-dev-debug` | 176 / 213 | **ours** (+ visual layout section) — keep |
-| `jahia-dev-create-page-template` | 341 / 303 | **agentic** larger — pull improvements next pass |
-| `jahia-dev-create-template-set` | 205 / 249 | **ours** (+ inactive-languages post-creation step) |
-| `jahia-dev-build-component` | 133 / 140 | diff next pass |
-| `jahia-dev-start-local` | 121 / 129 | diff next pass |
+| `jahia-dev-create-page-template` | 341 / 381 | **ours** (upstream Layout shell ported 2026-09-30; upstream still parents chrome on the site node + inline nav) - keep |
+| `jahia-dev-create-template-set` | 205 / 274 | **ours** (MCP primary ported 2026-09-30; + curl fallback, inactive-languages step) |
+| `jahia-dev-build-component` | 133 / 158 | **ours** (cnd-author routing + autopilot ported 2026-09-30; + a11y step) |
+| `jahia-dev-start-local` | 121 / 147 | **ours** (MCP primary ported 2026-09-30; + curl fallback) |
 | `jahia-dev-define-content-type` | — / — | **ours** (deepened 89f17df; upstream delegates to cnd-author) |
 
 ## Intentional divergences (LOCAL-ONLY — keep; not in upstream)
