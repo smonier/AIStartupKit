@@ -98,10 +98,47 @@ Once the project is created, the CLI will suggest commands to start it. Run them
 
 ---
 
+### Choosing the CND namespace
+
+The CLI derives the namespace from the module name with hyphens removed (`classic-templates` →
+`classictemplates` / `classictemplatesmix`), and there is no prompt to change it. To pick a short
+prefix, change the two namespace lines of `settings/definitions.cnd` **before the first deploy**
+(a registered prefix cannot be renamed; see the namespace-collision trap in `jahia-dev-debug`), and
+rename `settings/content-types-icons/<module>mix_component.png` to `<prefix>mix_component.png`. First
+check the prefix is free on the target instance: list `jcr { nodeTypes { nodes { name } } }` and
+look at the prefixes.
+
+---
+
 ## Step 3 — After generation
 
 1. `cd <project-name>`
-2. `yarn install` — install dependencies
+2. `yarn install` — install dependencies. If Yarn complains the project "isn't part of the workspace"
+   (a parent directory holds a `package.json`), create an empty `yarn.lock` in the module root: that
+   marks it as a standalone project.
+
+### Jahia-standard CI (modules built and published by Jahia)
+
+The scaffold's `.github/workflows/build.yml` only builds and uploads the tgz. A module that follows
+the Jahia standard (Cortex review, Sonar, integration tests, Nexus publish, release) copies the
+layout of `luxe-jahia-demo` instead:
+
+- a thin `pom.xml` (parent `org.jahia.modules:jahia-modules:8.2.1.0`, packaging `pom`) that runs
+  `frontend-maven-plugin` (`yarn install`, `yarn build`), attaches `dist/package.tgz` with
+  `build-helper-maven-plugin` and copies it to `target/` with `maven-antrun-plugin`;
+- `.yarn/releases/yarn-4.x.cjs` + `yarnPath` in `.yarnrc.yml`, so the Yarn 1 that the Maven plugin
+  installs hands over to Yarn 4;
+- `package.json` → `jahia.maven.groupId` (`org.jahia.modules.javascript`) and
+  `distributionManagement`, `jahia.module-dependencies` pinning `javascript-modules-engine=[1.1,2)`;
+- `.github/workflows/`: `on-code-change`, `on-merge`, `on-release`, `schedule-sonar`, `manual-run`,
+  plus the globally managed `chachalog-*` and `delivery-*` (copy, never edit), `.github/release.yml`,
+  `maven.settings.xml`, `instructions/changelog.instructions.md`, and `renovate.json` with
+  `"ignorePaths": ["**/node_modules/**"]` (the recommended preset silently ignores `tests/`);
+- a `tests/` Cypress project (see `/jahia-dev-cypress`), a root `LICENSE`, no per-file license header.
+
+> ⚠ Changing `jahia.maven.groupId` after a first deploy does **not** replace the installed bundle:
+> provisioning skips a bundle with the same symbolic name and version. Uninstall the old one first
+> (`POST /modules/api/bundles/<old-group>/<name>/<version>/_uninstall`, form-encoded).
 
 To run the module locally, use the `/jahia-dev-start-local` skill next.
 

@@ -113,6 +113,39 @@ export default defineConfig({
 })
 ```
 
+### Support file: register `@jahia/cypress` and bind `fetch`
+
+```javascript
+// tests/cypress/support/e2e.js
+import 'cypress-wait-until'
+
+// Apollo (behind every @jahia/cypress GraphQL helper) calls fetch unbound. Without this line every
+// query fails with "Failed to execute 'fetch' on 'Window': Illegal invocation" - which surfaces as
+// "Cannot read properties of undefined (reading 'filter')" in waitAllJobsFinished (createSite,
+// deleteSite, publishAndWaitJobEnding all call it).
+if (typeof window !== 'undefined' && window.fetch) {
+    globalThis.fetch = window.fetch.bind(window)
+}
+
+require('cypress-terminal-report/src/installLogsCollector')()
+require('@jahia/cypress/dist/support/registerSupport').registerSupport()
+```
+
+### Lint: the tests project uses ESLint 8 with `.eslintrc.json`
+
+If the module root has a flat `eslint.config.js` (the `@jahia/create-module` scaffold does), ESLint 8
+finds it first and rejects `--ext`. Force the legacy config in `tests/package.json`:
+`"lint": "ESLINT_USE_FLAT_CONFIG=false eslint . -c .eslintrc.json --ext .ts"`, and add
+`tests/**` to the root config's `ignores`.
+
+### CI layout
+
+For a module built by the shared Jahia CI (`jahia-modules-action`), copy the rest of the `tests/`
+infrastructure from `luxe-jahia-demo/tests/`: `ci.build.sh`, `ci.startup.sh`, `env.*.sh`,
+`docker-compose.yml`, `provisioning-manifest-build.yml` (installs `javascript-modules-engine`; the
+built module comes from the build artifacts) and `provisioning-manifest-snapshot.yml` (adds
+`js:mvn:<groupId>/<module>/LATEST/tgz`), `reporter-config.json`, `.env.example`.
+
 ---
 
 ## Step 3 — constants.ts
