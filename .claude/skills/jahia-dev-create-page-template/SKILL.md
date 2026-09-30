@@ -53,16 +53,19 @@ Every template renders through one `Layout` (`src/templates/Layout.tsx`) that ow
 
 ```tsx
 import type { ReactNode } from "react";
-import { useServerContext } from "@jahia/javascript-modules-library";
+import { server, useServerContext } from "@jahia/javascript-modules-library";
 import { useTranslation } from "react-i18next";
 
 export const Layout = ({ title, children }: { title?: string; children: ReactNode }) => {
-  const { renderContext } = useServerContext();
+  const { renderContext, currentResource } = useServerContext();
   const { t } = useTranslation();
   const site = renderContext.getSite();
-  const siteName = site.getPropertyAsString("j:siteTitle") ?? site.getName();
+  // The page depends on site-node data (title, description, theme): declare it, or publishing a
+  // change to the site node leaves every cached live page stale.
+  server.render.addCacheDependency({ node: site }, renderContext);
+  const siteName = site.getTitle() || site.getName(); // the site's native j:title
   return (
-    <html lang={renderContext.getMainResourceLocale().getLanguage()}>
+    <html lang={currentResource.getLocale().getLanguage()}>
       <head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -79,6 +82,11 @@ export const Layout = ({ title, children }: { title?: string; children: ReactNod
 ```
 
 - `lang` comes from the rendering locale, never a literal `"en"`.
+- The site title is the site node's native `j:title` (`site.getTitle()`); there is no `j:siteTitle`
+  property. The site node also has a native `j:description`: use it as the fallback
+  `<meta name="description">`, so every page has one (Lighthouse SEO fails without it).
+- `site.getHome()` (from `org.jahia.services.content.decorator`'s `JCRSiteNode`) returns the home
+  page: the owner of the shared header/footer areas.
 - The skip link text is a locale key, and the target `id="main-content"` sits on the template's `<main>`.
 - The template renders the page's `<h1>` from `jcr:title`; components never render `<h1>` (see `jahia-dev-create-view` Step 1b for the hero case).
 - Keep the navigation a **component** (a Navigation Menu type seeded in the header area, 3 levels deep), not inline template markup: inline nav cannot be edited or reused, and it breaks rule 19.
@@ -275,6 +283,10 @@ yarn build && yarn jahia-deploy
 
 After deploying, the new template will appear in the **template selection** step when creating a new page (right-click on a page in the sidebar → **+ New Page**).
 
+> The picker shows the template's `displayName` as written, in every UI language. Core would look
+> up `jmix_hasTemplateNode.j_templateName.<name>` in the module bundle, but with the JS engine
+> 1.2.0 those keys are ignored (tested on 8.2.3.2). Pick names that read well in English.
+
 ---
 
 ## Common patterns
@@ -326,7 +338,9 @@ const home = renderContext.getSite().getNode("home"); // the owner of shared chr
 - [ ] Areas use a custom area node type (not bare `<Area name="..."/>`)
 - [ ] Custom area type has `jmix:list`, `jmix:hiddenType`, and `orderable`
 - [ ] `AbsoluteArea` for shared chrome uses the **home page** as parent (`site.getNode("home")`), with `readOnly="children"`, never the site node
-- [ ] `<title>` is "page | site" (`j:siteTitle`), `<html lang>` from the rendering locale
+- [ ] `<title>` is "page | site" (`site.getTitle()`, the native `j:title`), `<html lang>` from the rendering locale
+- [ ] `<meta name="description">` on every page (page `jcr:description`, else the site's `j:description`)
+- [ ] Layout declares a cache dependency on the site node if it renders anything read from it
 - [ ] Skip link present (`<a href="#main-content">`, text from a locale key) and `<main id="main-content">`
 - [ ] Exactly one `<h1>`, rendered by the template from `jcr:title` - no `<h1>` in any component
 - [ ] `<footer>` landmark always has visible content (never empty) - seed the footer node in `import.xml`

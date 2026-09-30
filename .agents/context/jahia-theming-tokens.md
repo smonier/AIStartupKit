@@ -90,6 +90,14 @@ const theme = site.isNodeType("nsmix:siteTheme") ? site.getPropertyAsString("nsT
 <html lang={lang} data-ns-theme={theme && theme !== "default" ? theme : undefined} data-ns-scheme={scheme}>
 ```
 
+**Cache:** the rendered page now depends on the site node, which is not below the page. Declare it
+in the Layout, or publishing a new theme leaves every cached live page on the old one (seen on
+8.2.3.2: preview switched, live did not):
+
+```tsx
+server.render.addCacheDependency({ node: site }, renderContext);
+```
+
 The theme blocks then override tier 2 only:
 
 ```css
@@ -107,24 +115,27 @@ Every value needs an EN and an FR label, plus a `ui.tooltip` for the field.
 
 ## Light and dark
 
-Two inputs, one outcome:
-
-1. **The visitor's system preference:** `@media (prefers-color-scheme: dark)`.
-2. **The site's explicit choice:** `data-ns-scheme="light|dark"` stamped by the layout (`auto` stamps nothing).
+Use `light-dark()` for every colour role, so dark mode is never written twice:
 
 ```css
-:root { color-scheme: light; /* light semantic roles */ }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-ns-scheme="light"]) { color-scheme: dark; /* dark semantic roles */ }
+:root {
+  color-scheme: light dark;            /* auto: follow the visitor's system */
+  --ns-color-text: light-dark(var(--ns-slate-900), var(--ns-slate-50));
+  --ns-color-surface-page: light-dark(var(--ns-white), var(--ns-slate-950));
 }
-:root[data-ns-scheme="dark"] { color-scheme: dark; /* same dark semantic roles */ }
+:root[data-ns-scheme="light"] { color-scheme: light; }   /* the site forces a scheme */
+:root[data-ns-scheme="dark"] { color-scheme: dark; }
+:root[data-ns-theme="ocean"] {                          /* a theme overrides pairs, not blocks */
+  --ns-color-accent: light-dark(var(--ns-teal-700), var(--ns-teal-300));
+}
 ```
 
-- The dark block is written twice (media query and explicit attribute). Keep them identical;
-  a build-time copy or a shared `@layer` avoids drift.
-- **Each brand theme needs its dark variant too** (`:root[data-ns-theme="ocean"][data-ns-scheme="dark"]`
-  plus its media-query twin), otherwise a dark visitor gets the default dark accent on an ocean site.
+- The half that applies follows the used `color-scheme`, so a theme's dark variant is simply the
+  second half of its pairs: no `[data-theme][data-scheme]` combinations, no media-query twin.
+- `light-dark()` only takes colours; non-colour tokens (fonts, radii) are per theme, not per scheme.
+- Browser support is Baseline 2024. Jahia's CSS aggregation and minification keep `light-dark()`,
+  `color-mix()` and `clamp()` intact (verified on 8.2.3.2; it only drops the quotes of attribute
+  selectors, which stays valid).
 - `color-scheme` makes form controls and scrollbars follow the theme for free.
 - Images and logos: offer a dark logo slot on the header (`logoDark` weakreference) rather than
   inverting with a CSS filter.
@@ -145,8 +156,12 @@ theme × scheme pair, check the pairs that are actually used together:
 | `border-strong`, `focus` | `surface-page` | 3:1 (non-text UI) |
 
 tenant-portal found two real brand colours failing AA on white and had to darken the status
-tokens. Catch that in the token file, then let `/jahia-review-site` (full axe ruleset) confirm on
-rendered pages in each theme.
+tokens. Catch that in the token file with a script, then let `/jahia-review-site` (full axe
+ruleset) confirm on rendered pages in each theme. classic-templates ships both as package scripts
+to copy: `scripts/check-contrast.mjs` resolves `tokens.css` the way a browser does (theme block over
+`:root`, `var()` substituted, `light-dark()` split by scheme, translucent colours composited) and
+checks every pair for every theme × scheme; `scripts/check-tokens.mjs` fails on any literal colour
+outside `tokens.css`. Break a token on purpose once to see each gate fail before trusting it.
 
 ---
 
@@ -168,6 +183,7 @@ rendered pages in each theme.
 - [ ] Spacing scale and fluid type scale in tokens; two or three documented breakpoints
 - [ ] `nsmix:siteTheme` on `jnt:virtualsite` with theme + colour-scheme choicelists, EN/FR labels and tooltips
 - [ ] Layout reads the mixin defensively and stamps `data-ns-theme` / `data-ns-scheme`
-- [ ] Dark roles for every theme, in both the media query and the explicit attribute
+- [ ] Every colour role a `light-dark()` pair; `data-ns-scheme` only sets `color-scheme`
+- [ ] Layout declares a cache dependency on the site node
 - [ ] Contrast table checked for every theme × scheme pair; `/jahia-review-site` green in each
 - [ ] `prefers-reduced-motion` zeroes motion tokens; reveal effects off in edit mode

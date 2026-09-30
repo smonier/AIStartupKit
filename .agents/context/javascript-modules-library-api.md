@@ -56,6 +56,15 @@ const siteKey = renderContext.getSite().getName();
 const isEdit = renderContext.isEditMode();
 ```
 
+> The site: `renderContext.getSite()` is a `JCRSiteNode`. Its type comes from
+> `import type { JCRSiteNode } from "org.jahia.services.content.decorator"` (not
+> `org.jahia.services.content`). It has `getTitle()` (native `j:title`), `getHome()` (the home page,
+> owner of shared AbsoluteAreas) and the usual node API.
+>
+> Cache dependency on a node outside the rendered subtree:
+> `server.render.addCacheDependency({ node }, renderContext)` (also `{ path }`, `{ uuid }`,
+> `{ flushOnPathMatchingRegexp }`), with `server` imported from the library.
+
 > `mainNode` is the page, not the component. Use `currentNode` for the component's own data. Use `jcrSession` for JCR reads that cannot go through props (e.g. reading a node by path in a computed listing).
 
 ---

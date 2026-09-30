@@ -105,6 +105,7 @@ reconcile field-by-field only if upstream grows something we lack:
 | `jahia-dev-build-component` | 133 / 158 | **ours** (cnd-author routing + autopilot ported 2026-09-30; + a11y step) |
 | `jahia-dev-start-local` | 121 / 147 | **ours** (MCP primary ported 2026-09-30; + curl fallback) |
 | `jahia-dev-define-content-type` | — / — | **ours** (deepened 89f17df; upstream delegates to cnd-author) |
+| `jahia-cnd-author` (`references/cnd-area-types.md` only) | — / — | **ours** since 2026-09-30: area type example uses `jmix:hiddenType`, not upstream's `jmix:studioOnly` (contradicts the upstream-adopted rule and causes silent rendering issues). SKILL.md and the other references stay identical |
 
 ## Intentional divergences (LOCAL-ONLY — keep; not in upstream)
 
@@ -123,6 +124,7 @@ Our value-add beyond the JS-only reference harness:
 - `check-cnd.mjs`: ignore directive + name-scoped missingI18n (from our datatable session).
 - `check-cnd.mjs`: cross-file `namespaceUriMismatch` rule (a prefix bound to two URIs silently fails the JS-module install; found on the classic-templates link spike, 2026-09-30).
 - `jahia-review-site` Step 1: missing `lighthouse` in the install command (script imports it).
+- `jahia-cnd-author/references/cnd-area-types.md`: `jmix:studioOnly` → `jmix:hiddenType` on area types.
 - `jahia-review-code`: our C9–C12 critical checks + W10 locale-sync check; W3 correction
   (`jmix:hiddenType` only on singleton absolute-area types, never on orderable-list children).
 
