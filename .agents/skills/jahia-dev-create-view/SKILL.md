@@ -92,6 +92,10 @@ Build these requirements in from the start; retrofitting them later is more expe
 | `<main>` | Exactly one per page, wrapping all page body content (already enforced by the Layout component for page templates) |
 | Headings | Each page has exactly one `<h1>`, **owned by the page template** and rendered from the page's `jcr:title` (the `fullPage` view of a main resource renders the item's title as its `<h1>`). Components start at `<h2>`; sub-sections use `<h3>`. Never skip levels. |
 
+**Nested sections.** A section that can be dropped inside another (a rich text inside a column of a
+grid row) picks its level from its position: `h3` when its parent is a column, `h2` otherwise. One
+small shared helper (`headingLevelFor(node)`) keeps the rule in one place.
+
 **Hero headings.** A hero is a component, so its heading defaults to `<h2>`. When a design needs the hero heading to *be* the page title, do not give the hero its own `<h1>` (two `<h1>`s fail Lighthouse, and a hero dropped on a second page duplicates it). Give the page a "hide title" option (a page mixin boolean) that renders the template's `<h1>` visually hidden, so screen readers and crawlers still get the page title.
 
 ### Images

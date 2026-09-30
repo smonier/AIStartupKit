@@ -715,3 +715,38 @@ This is a platform bug tracked upstream. Check the Jahia GitHub before applying 
 
 - Reference module: `/Users/stephane/Runtimes/0.Modules/luxe-jahia-demo`
 - Jahia developer training: https://github.com/Jahia/developer-training/blob/main/js-training/slides.md
+
+
+---
+
+## Columns / grid row: named child lists, not AbsoluteAreas (classic-templates, 2026-09-30)
+
+A row of editable columns is best modelled as a type with **autocreated named child lists**, rendered
+with `RenderChild`, rather than one `AbsoluteArea parent={currentNode}` per column (mysoprahr's
+GridRow):
+
+```cnd
+[ns:column] > jnt:content, jmix:list orderable
+ + * (nsmix:pageComponent)
+
+[ns:columns] > jnt:content, mix:title, nsmix:pageComponent
+ - layout (string, choicelist[resourceBundle]) = 'halves' autocreated < 'halves', 'thirds', 'quarters'
+ + col1 (ns:column) = ns:column autocreated
+ + col2 (ns:column) = ns:column autocreated
+ + col3 (ns:column) = ns:column autocreated
+ + col4 (ns:column) = ns:column autocreated
+```
+
+```tsx
+{["col1", "col2", "col3", "col4"].slice(0, COUNT[layout]).map((name) => <RenderChild key={name} name={name} />)}
+// ns:column default view: <div className={classes.column}><RenderChildren /></div>
+```
+
+- The columns exist from creation (JCR creates autocreated children, also over GraphQL), so an
+  editor always finds them in Page Builder: each renders as a list restricted to the page-section
+  mixin, with its own add button (edit-frame marker `nodetypes="nsmix:pageComponent"`).
+- Rendering only as many as the layout needs means switching from 4 to 2 columns hides columns 3-4
+  without deleting their content; switching back restores it.
+- Sections dropped in a column are already inside the row's container: neutralise their own
+  container gutter (`.column :global(.container) { padding-inline: 0; max-width: none }`) and step
+  their heading down to h3 (parent `isNodeType("ns:column")`) so the outline stays h1 > h2 > h3.

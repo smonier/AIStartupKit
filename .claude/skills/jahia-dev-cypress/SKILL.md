@@ -430,7 +430,16 @@ cy.contains('Découvrir plus')  // FR CTA label
 | `deleteSite(siteKey)` | `@jahia/cypress` | Delete a site (use in `after`) |
 | `addNode(variables)` | `@jahia/cypress` | Create a JCR node via GraphQL |
 | `publishAndWaitJobEnding(path, locales?)` | `@jahia/cypress` | Publish content and block until the job completes |
-| `uploadFile(path, target, name, mimeType)` | `@jahia/cypress` | Upload a file to the JCR |
+| `uploadFile(path, target, name, mimeType)` | `@jahia/cypress` | Upload a file to the JCR (see the warning below for images) |
+
+> ⚠ **Images: prefer a Node-side task over `uploadFile`.** `uploadFile` sends the binary through
+> Apollo's GraphQL-multipart `map` indirection, the route known to store the literal name of a Java
+> object (`org.apache.catalina.core.ApplicationPart@...`) instead of the bytes, and it creates a
+> plain `jnt:file` without `jmix:image`, so it cannot fill a `< jmix:image` weakreference. Register
+> a `cy.task` that posts `operations` + a part named e.g. `image`, sets `jcr:data` with
+> `setValue(type: BINARY, value: "image")` (the part NAME as a string), adds `mixins: ["jmix:image"]`
+> with `j:width`/`j:height`/`jcr:title`, then reads `jcr:data` back and fails on `org.apache.`.
+> Reference: classic-templates `tests/cypress/plugins/upload-image.js`.
 
 `createSite` options:
 

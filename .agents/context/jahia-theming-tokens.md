@@ -19,7 +19,9 @@ Enforce it with a gate, not with review. A grep over component CSS is enough:
 grep -rn -E '#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(' src/components --include='*.css'
 ```
 
-Only `tokens.css` may match.
+Only `tokens.css` may match. Components must not read tier-1 primitives either
+(`var(--ns-slate-900)`, `var(--ns-white)`): they bypass the theme overrides just like a literal.
+classic-templates' `scripts/check-tokens.mjs` checks both.
 
 ---
 
