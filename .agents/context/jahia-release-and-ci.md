@@ -143,3 +143,14 @@ every demo page before and after deploying (byte-identical), plus unit tests and
 
 Reference: classic-templates (Jahia org path), jsfaq / js-media-gallery / js-store-locator
 (add-on path), 2026-10-01.
+
+## Replicating sites to another instance
+
+Exported sites keep `siteservername=localhost`. On Jahia Cloud the instance then builds absolute
+URLs with its own host and resolves pages from the `/sites/<key>/` path; a made-up server name
+(`<site>.demo`) leaks into canonical and sitemap URLs. Several sites on `localhost` make
+`renderContext.getSite()` return the same site for all of them, so views must read the page's own
+site (see CLAUDE.md). `importSite` takes the inner `<sitekey>.zip`, never the container zip of an
+Administration export; leave `roles.zip` and `mounts.zip` out on shared instances, and recreate the
+`systemsite` categories the site refers to before importing (references are by path).
+Reference kit: 0.Modules/demo-replication (`replicate.sh --site <key>`).

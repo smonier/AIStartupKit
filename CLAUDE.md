@@ -144,6 +144,7 @@ cd <project-name> && yarn install
 ### Critical view rules
 
 - Import `Props` from `./types.js` (`.js` extension at import time).
+- Read site settings (theme, name, home, chrome) from the **page's own site**, `renderContext.getMainResource().getNode().getResolveSite()`, never `renderContext.getSite()`: on Jahia Cloud, sites keep the server name `localhost` and `getSite()` then returns one site for every `/sites/...` URL (classic-templates 0.3.1).
 - Use `buildNodeUrl(node)` for all node URLs. Guard optional nodes: `node ? buildNodeUrl(node) : undefined`.
 - Never read properties from a weakreference node inline — render it via `<Render node={ref} />` for correct cache invalidation.
 - **Never hardcode links or URLs.** All navigable links come from contributed content (`j:linkType`, `buildNodeUrl`, weakreference).
