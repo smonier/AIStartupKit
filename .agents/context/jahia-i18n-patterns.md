@@ -202,12 +202,13 @@ t("form.contact.sendMessageError", { name, status })
 ```tsx
 import { useTranslation } from "react-i18next";
 
-// Server views may use the bare form - the engine sets the namespace synchronously
-// around each server render.
-const { t } = useTranslation();
-
-// Client islands MUST name the module namespace explicitly (see "Namespace in Islands").
+// ALWAYS name the module namespace, in server views as in client islands.
 const { t } = useTranslation("<module-name>");
+// Never the bare form: useTranslation() resolves against the current default namespace,
+// which is another module's when the page also renders that module's views. Seen on
+// classic-templates 2026-10-01: on item pages owned by classic-travel / js-store-locator,
+// the template set's Layout, Breadcrumb and JSON-LD (rendered after the item view) printed
+// the raw key "breadcrumb.home". Islands have the same problem (see "Namespace in Islands").
 
 // Simple key
 <button>{t("section.contact.btn")}</button>
@@ -259,8 +260,8 @@ function buildEstateRows(estate: EstateProps, t: TFunction) {
   ];
 }
 
-// In the component (server view; in a client island: useTranslation("<module-name>"))
-const { t } = useTranslation();
+// In the component (server view or client island: always the module namespace)
+const { t } = useTranslation("<module-name>");
 const rows = buildEstateRows(estate, t);
 ```
 
