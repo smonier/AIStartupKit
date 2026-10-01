@@ -53,6 +53,9 @@ hand from a CI-built package, never a local build:
 3. Point the release tag at that commit (`git tag -f X_Y_Z <sha> && git push -f origin refs/tags/X_Y_Z`),
    attach the package, write the notes.
 4. **Immediately** commit `X.Y.(Z+1)-SNAPSHOT` back on `main`.
+5. Update the README's "Latest release" line (link to the new release) in the same follow-up
+   commit: a status line written before the first release ("in development, not released yet")
+   otherwise survives every release.
 
 **`main` must always carry a `-SNAPSHOT` version.** The shared `@jahia/cypress` provisioning
 installs only `*-SNAPSHOT.jar` / `*-SNAPSHOT.tgz` from `artifacts/`, so on a release version the
