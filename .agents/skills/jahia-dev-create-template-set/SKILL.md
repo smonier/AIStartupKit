@@ -136,6 +136,11 @@ layout of `luxe-jahia-demo` instead:
   `"ignorePaths": ["**/node_modules/**"]` (the recommended preset silently ignores `tests/`);
 - a `tests/` Cypress project (see `/jahia-dev-cypress`), a root `LICENSE`, no per-file license header.
 
+Before the first release, read [`jahia-release-and-ci.md`](../../context/jahia-release-and-ci.md):
+a repo created by hand must give the org CI account write access or the release job cannot push,
+SonarQube has no baseline until the first PR (that PR counts the whole project), and `Publish
+module` and `SBOM processing` are red on every push to `main` of a JS module.
+
 > ⚠ Changing `jahia.maven.groupId` after a first deploy does **not** replace the installed bundle:
 > provisioning skips a bundle with the same symbolic name and version. Uninstall the old one first
 > (`POST /modules/api/bundles/<old-group>/<name>/<version>/_uninstall`, form-encoded).

@@ -195,7 +195,10 @@ composite too:
 Give add-ons (FAQ, gallery, store locator, forms) one section type that accepts
 `jmix:droppableContent`, a "free zone" referencing only core types, so there is no hard
 dependency. Add a bridge stylesheet that maps their variables onto the semantic tokens:
-- Scope the mapping to the zone's class: a class beats the add-on's `:root` defaults.
+- Scope the mapping to the zone's class. It wins over the add-on's `:root` defaults by
+  inheritance, not specificity (`:root` and a class weigh the same): elements inside the zone
+  inherit the value from the nearest ancestor that sets it. An add-on that declares its variables
+  on its own root class instead of `:root` needs the mapping on that class, inside the zone.
 - Put a variable on `:root` only when the add-on renders outside the zone. Formidable's message
   button is one: it sits beside the form.
 - Where an add-on paints outside its variables, **measure first**. Sweep the computed
@@ -206,6 +209,10 @@ dependency. Add a bridge stylesheet that maps their variables onto the semantic 
 - Never recolour every add-on heading. A component that keeps its own light panel (js-store-locator)
   then shows light text on light: axe caught this in dark mode only.
 - Re-run the site review with the scheme forced dark, not just light.
+- **Heading levels.** The zone's optional title is an `h2`; an add-on placed under it must start
+  at `h3` (jsfaq has a heading-level field). An add-on with a fixed `h2` title and no level option
+  (js-media-gallery) goes in a zone **without** a title: its own heading is the section heading,
+  so the outline never shows two `h2` in a row for one section.
 
 Reference: classic-templates `src/templates/addons.css`.
 

@@ -96,6 +96,12 @@ Rule: **if a human visitor can read it, a contributor must be able to edit it.**
 **C13 — Rich text rendered without sanitising**
 Check: any `dangerouslySetInnerHTML` fed by a `richtext` property (or any stored HTML) that does not go through an allow-list sanitizer.
 Fix: sanitise at render time in one shared component (server side: `js-xss` with an allow-list; in a client island: `DOMParser`). Never rely on platform-side HTML filtering: it is a site setting the template set cannot count on. Keep formatting, lists, tables, links, images; drop scripts, styles, frames, handlers, `class`/`style`; allow href/src only for http(s), mailto, tel, relative and `##cms-context##` (not `//host`); turn `<h1>` into `<h2>`. jahia-security-scan R10 still flags the one sink: document the justification next to it.
+Also check the filter itself, four defects found in two modules built on js-xss:
+- **Attribute parsing must be linear.** js-xss's own attribute step is quadratic in tag length (an 80 KB tag took 48 s, 32 KB 550 ms). Read start-tag attributes in one forward pass of your own.
+- **No `[removed]` text.** `stripIgnoreTagBody` leaves that literal where it drops an element (`<embed>`). Drop elements and their content in the filter's own hooks (script, style, iframe, object, noscript, template, title, textarea, select, svg, math...); `<embed>` is a void tag.
+- **Prefix only declared ids.** Rewrite `href="#x"` to the block prefix only when the same block declares `id="x"`; `#main-content` and other page anchors stay as written.
+- **Balanced output.** A heading inside a heading closes the first one, every element opened in the block is closed, stray closing tags are dropped.
+Decode attribute values with the full HTML entity table (`entities`) before checking a URL scheme, reject backslashes and control characters, re-encode on output, and read `<!-->` and `</br>` as browsers do. Reference: classic-templates `src/lib/sanitize.ts` (44 tests).
 
 **C8 — Generic area type used for every Area**
 Check: page templates where every `<Area>` uses the same generic area type (e.g. `nodeType="namespace:pageArea"` everywhere). This means editors see ALL `pageComponent` types as droppable options in every area — a hero section will appear as an option in a feature card grid.

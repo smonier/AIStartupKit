@@ -290,6 +290,12 @@ Expected response: `{"data": {"jcr": {"mutateNode": {"publish": true}}}}`
 > in progress there. Publish each new node with its subtree, and the list it was added to without
 > its subtree (`publishSubNodes: false, includeSubTree: false`), which is enough for the new order
 > to reach live. Reference: classic-templates `scripts/seed-demo.py --sections-only`.
+>
+> **Decide what to publish from live, not from "created in this run".** An idempotent seed that
+> stops halfway (a value constraint rejects one property) has created the page; the rerun then
+> sees it as existing and publishes nothing. Publish each root the script owns when it is missing
+> from the `live` workspace (`jcr(workspace: LIVE) { nodeByPath }` raising `PathNotFoundException`).
+> Reference: classic-templates `scripts/seed-addons.py --showcase`.
 
 ## Step 5 — Batch creation
 

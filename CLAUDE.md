@@ -393,5 +393,6 @@ All new code — regardless of module type — is held to these standards at mer
 - i18n file locations, key conventions, useTranslation, loadNamespaces: [`.agents/context/jahia-i18n-patterns.md`](.agents/context/jahia-i18n-patterns.md)
 - CSS design tokens and themes (3 tiers, site-mixin theme switch, dark mode, contrast per theme, theming add-ons in a free zone): [`.agents/context/jahia-theming-tokens.md`](.agents/context/jahia-theming-tokens.md)
 - RGAA 4.1.2 (French accessibility standard): what axe misses, fixes, the accessibility statement: [`.agents/context/jahia-rgaa.md`](.agents/context/jahia-rgaa.md)
+- Releasing JS modules and reading their CI (chachalog release PR then `X_Y_Z` prerelease, CI account access on new repos, the two jobs red by design, add-on releases from the CI package with CHANGELOG + LICENSE, SonarQube gate and the TypeScript rules to write right first): [`.agents/context/jahia-release-and-ci.md`](.agents/context/jahia-release-and-ci.md)
 - Native node types (CND source): https://github.com/Jahia/jahia/tree/master/war/src/main/webapp/WEB-INF/etc/repository/nodetypes
 - Developer training slides: https://github.com/Jahia/developer-training/blob/main/js-training/slides.md
