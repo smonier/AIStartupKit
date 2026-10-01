@@ -105,6 +105,11 @@ Write TypeScript that passes the rules met on template sets from the start:
 | S7755 | `.at(-1)` instead of `[x.length - 1]` |
 | S7763 | `export { x } from "./y.js"` to re-export |
 | S7778 | one `push(a, b)` instead of two pushes |
+| S5852 (hotspot) | no two adjacent quantified groups that can match the same characters: `<([a-z][a-z0-9]*)([^<>]*)>` is quadratic on an unclosed tag (186 ms at 20 KB); add `(?![a-z0-9])` after the name, which changes no match |
+
+Hotspots do not fail the gate but wait for a review in SonarQube. Test fixtures that feed
+`javascript:` or `http:` URLs to a filter (S1523, S5332) are expected there; mark them reviewed as
+Safe in SonarQube (the user does it, it is their account) rather than editing the tests.
 
 A refactor done for the gate must not change output: compare the rendered `<main>` and JSON-LD of
 every demo page before and after deploying (byte-identical), plus unit tests and Cypress.
