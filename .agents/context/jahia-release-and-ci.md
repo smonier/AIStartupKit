@@ -39,6 +39,30 @@ Traps:
 - **Bot PRs.** A PR the chachalog bot opens or updates runs its checks normally on Jahia repos;
   on the very first release PR they may sit at `action_required` until a maintainer approves.
 
+### Manual release when the release workflow cannot run
+
+When the release job is blocked (no CI write access yet) and a release is needed now, cut it by
+hand from a CI-built package, never a local build:
+
+1. Commit `chore: release <module> X.Y.Z` on `main`: `package.json` and `pom.xml` version
+   `X.Y.Z`, `.chachalog/.version`, and rename the pending `## ` section of `CHANGELOG.md`.
+2. The `On merge to main` run uploads `build-artifacts`; the package is
+   `target/<module>-X.Y.Z.tgz` (download via `gh api repos/<o>/<r>/actions/artifacts/<id>/zip`,
+   available as soon as `Build Module` has finished). Check its `package.json` and grep it for
+   `/Users/`.
+3. Point the release tag at that commit (`git tag -f X_Y_Z <sha> && git push -f origin refs/tags/X_Y_Z`),
+   attach the package, write the notes.
+4. **Immediately** commit `X.Y.(Z+1)-SNAPSHOT` back on `main`.
+
+**`main` must always carry a `-SNAPSHOT` version.** The shared `@jahia/cypress` provisioning
+installs only `*-SNAPSHOT.jar` / `*-SNAPSHOT.tgz` from `artifacts/`, so on a release version the
+module is never installed in the CI Jahia and every integration test fails (pages answer 400,
+GraphQL `data` is undefined), which also skips `Publish module`. The release workflow avoids this
+by releasing from its own commits; a hand release must restore the SNAPSHOT itself.
+
+Nothing reaches Nexus on this path. Once the CI account has access, the next release goes through
+the normal prerelease path again.
+
 ## Personal add-on repos (scaffold CI)
 
 Repos such as `smonier/jsfaq` have no chachalog and no Nexus. The release is a GitHub release whose
