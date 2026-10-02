@@ -154,3 +154,8 @@ site (see CLAUDE.md). `importSite` takes the inner `<sitekey>.zip`, never the co
 Administration export; leave `roles.zip` and `mounts.zip` out on shared instances, and recreate the
 `systemsite` categories the site refers to before importing (references are by path).
 Reference kit: 0.Modules/demo-replication (`replicate.sh --site <key>`).
+
+To test an import next to the real site, rename the copy's key, and only the site's own root
+element: a folder named like the site (Skylantern's images live in `files/skylantern/`) must keep its
+name, or every image reference of the copy breaks (no images, no og:image) while the real export
+is fine.
